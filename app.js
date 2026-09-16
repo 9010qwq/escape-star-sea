@@ -6,6 +6,7 @@
   let state = null;
   let mapViewStage = 1;
   let selectedHand = null;
+  const cardDrafts = new Map();
   let voyageStarted = false;
   let mapFocusKey = '';
   let toastTimer = null;
@@ -16,22 +17,16 @@
   let aiTimer = null, aiBusy = false, revision = 0, requestAbort = null;
   let aiStatus = '本地策略已就绪', lastAiAction = '等待启航';
   let equipmentAnchor = null;
-  const phoneLandscape = matchMedia('(max-width:1120px) and (max-height:520px) and (orientation:landscape)');
-  const phonePortrait = matchMedia('(max-width:600px) and (orientation:portrait)');
-  let portraitAllowed = false;
-
+  const phoneLandscape = matchMedia('(max-width:1120px) and (min-aspect-ratio:3/2)');
+  const compactScreen = matchMedia('(max-width:1120px)');
+  let mapZoom = false;
   function syncPhoneLayout() {
-    const wasLandscape=document.body.classList.contains('phone-landscape');
+    const wasCompact=document.body.classList.contains('compact-ui');
+    document.body.classList.toggle('compact-ui',compactScreen.matches);
     document.body.classList.toggle('phone-landscape',phoneLandscape.matches);
-    if(phoneLandscape.matches){
-      if($('#orientationDialog').open)$('#orientationDialog').close();
-      if(!wasLandscape)setHandFolded(true);
-      requestAnimationFrame(focusMapOnPlayer);
-    }else{
-      if(wasLandscape){setHandFolded(false);renderHand();}
-      if(phonePortrait.matches&&!portraitAllowed&&!$('#orientationDialog').open)$('#orientationDialog').showModal();
-    }
-    $('#handBackdrop').hidden=!phoneLandscape.matches||document.body.classList.contains('hand-folded');
+    if(compactScreen.matches&&!wasCompact)setHandFolded(true);
+    $('#handBackdrop').hidden=!compactScreen.matches||document.body.classList.contains('hand-folded');
+    if(state){renderMap();requestAnimationFrame(focusMapOnPlayer);}
   }
 
   function setHandFolded(folded) {
@@ -41,7 +36,7 @@
     if(wasFolded&&!folded){document.body.classList.add('hand-reveal');setTimeout(()=>document.body.classList.remove('hand-reveal'),450);}
     $('#toggleHandButton').textContent=folded?'展开手牌 ↑':'收起手牌 ↓';
     $('#toggleHandButton').setAttribute('aria-expanded',String(!folded));
-    $('#handBackdrop').hidden=!phoneLandscape.matches||folded;
+    $('#handBackdrop').hidden=!compactScreen.matches||folded;
     if(folded && state) renderHand();
   }
   
@@ -139,7 +134,7 @@
   }
 
   function inspectHand(index) {
-    if(document.body.classList.contains('hand-folded')){setHandFolded(false);return;}
+    if(document.body.classList.contains('hand-folded'))setHandFolded(false);
     const p=playerById(HUMAN_ID),id=p.hand[index];if(!id)return;
     if(state.phase==='personal'&&Engine.currentPersonalPlayer(state)?.id===HUMAN_ID){
       if(state.mustDiscard){safeAction(()=>Engine.discardCard(state,id),true);return;}
@@ -153,7 +148,7 @@
     if(selectedHand===null)return;
     requestAnimationFrame(()=>{
       const card=els.hand.querySelector('.game-card.selected'),panel=card?.querySelector('.card-inline-actions');
-      const availableHeight=phoneLandscape.matches?els.hand.clientHeight:innerHeight-28;
+      const availableHeight=compactScreen.matches?els.hand.clientHeight:innerHeight-28;
       const target=card&&card.getBoundingClientRect().height<availableHeight?card:phoneLandscape.matches?panel?.querySelector('.primary-button'):panel;
       target?.scrollIntoView({block:'nearest',inline:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
     });
@@ -162,6 +157,10 @@
   function renderNodeDetail(stage,id) {
     const n=Engine.nodeById(stage,id);
     $('#nodeDetail').innerHTML='<strong>'+escapeHtml(n.name)+'</strong><span>'+escapeHtml(n.description)+'</span>';
+    hideHoverDetail();
+    $('#nodeDialogTitle').textContent=n.name;
+    $('#nodeDialogText').textContent=n.description;
+    $('#nodeDialog').showModal();
   }
 
   function setMobileView(view) {
@@ -354,7 +353,7 @@
       followActiveStage();
       persistAutosave();
       render();
-      if(closeHandAfter&&phoneLandscape.matches&&!state.mustDiscard)setHandFolded(true);
+      if(closeHandAfter&&compactScreen.matches&&!state.mustDiscard)setHandFolded(true);
       const latestEvent = state?.log?.[0];
       playFeedback(latestEvent && latestEvent.id !== beforeEventId ? latestEvent : null, beforePhase !== state?.phase);
     } catch (error) {
@@ -403,7 +402,7 @@
     if (!saved) throw new Error(`当前浏览器没有${label}`);
     const restored = normalizeRestoredState(JSON.parse(saved));
     cancelAi();
-    state = restored;
+    state = restored; cardDrafts.clear();
     voyageStarted = true;
     selectedHand = null;
     privacyUnlockedKey = null;
@@ -496,6 +495,19 @@
   function nodePositions(stageNumber) {
     const currentUniverse = Engine.universe(stageNumber);
     const result = {};
+    if(compactScreen.matches){
+      const landscape=phoneLandscape.matches,cols=landscape?6:4,rows=landscape?4:6;
+      let cells=[];
+      if(stageNumber===3){
+        const scheme=landscape?[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[5,1],[5,3],[0,3],[1,3],[2,3],[3,3],[0,2],[0,1],[1,1],[2,1],[3,2],[4,2]]:[[0,0],[1,0],[2,0],[3,0],[3,1],[3,2],[3,3],[3,5],[0,4],[1,5],[2,5],[2,4],[0,3],[0,2],[0,1],[1,2],[1,3],[2,3]];
+        cells=scheme;
+      }else{
+        for(let x=0;x<cols;x++)cells.push([x,0]);for(let y=1;y<rows;y++)cells.push([cols-1,y]);for(let x=cols-2;x>=0;x--)cells.push([x,rows-1]);for(let y=rows-2;y>0;y--)cells.push([0,y]);
+      }
+      currentUniverse.nodes.forEach((node,i)=>{const [x,y]=cells[i];result[node.id]={x:(landscape?9:12)+x*(landscape?82:76)/(cols-1),y:(landscape?12:9)+y*(landscape?76:82)/(rows-1)};});
+      els.mapStage.style.setProperty('--map-cols',cols);
+      return result;
+    }
     if (stageNumber === 3) {
       currentUniverse.nodes.forEach((node) => { result[node.id] = { x: Math.max(12, Math.min(88, node.x)), y: Math.max(9, Math.min(91, node.y)) }; });
       return result;
@@ -527,6 +539,28 @@
     });
   }
 
+  function layoutMap() {
+    const viewport=$('.map-viewport');
+    if(compactScreen.matches){
+      els.mapStage.classList.toggle('overview',!mapZoom);
+      els.mapStage.style.width=(mapZoom?Math.max(900,viewport.clientWidth):viewport.clientWidth)+'px';
+      els.mapStage.style.height=(mapZoom?Math.max(phoneLandscape.matches?500:680,viewport.clientHeight):viewport.clientHeight)+'px';
+    }else{els.mapStage.classList.remove('overview');els.mapStage.style.width='';els.mapStage.style.height='';}
+    $('#mapZoomButton').textContent=mapZoom?'全图':'放大';
+    $('#mapZoomButton').setAttribute('aria-pressed',String(mapZoom));
+    positionMapTokens();
+  }
+
+  function compactNodeEffect(n){
+    if(n.kind==='warp')return '购买曲速';if(n.kind==='eye')return '资源 / 逃离';
+    if(n.kind==='tunnel')return '判定 / 传送';if(n.kind==='wormhole')return n.oneWayEye?'经眼区传送':n.pair?'传至另一端':'单向出口';
+    if(n.fortress)return '判定 / 保护';if(n.chaos)return '掷骰判定';
+    if(n.discardEquipmentReward)return '弃装换资源';if(n.discardHandReward)return '弃牌换资源';
+    if(n.forcedBack)return '退'+n.forcedBack+' / 不摸牌';if(n.forcedForward)return '进'+n.forcedForward+' / 不摸牌';
+    if(n.stagnation)return '负面 / 停'+n.stagnation+'轮';if(n.discardEquipment)return '弃置装备';
+    return nodeEffect(n).replaceAll('额外常规','摸常规').replaceAll('额外机遇','摸机遇').replaceAll(' · ',' ');
+  }
+
   function renderMap() {
     const currentUniverse = Engine.universe(mapViewStage);
     const positions = nodePositions(mapViewStage);
@@ -539,7 +573,7 @@
         const a = positions[node.id];
         const b = positions[targetId];
         const special = node.kind.startsWith("wormhole") || node.kind.startsWith("tunnel") || node.next.length > 1;
-        lines.push(`<line class="orbit-line ${special ? "special" : ""}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" marker-end="url(#arrow)" />`);
+        lines.push(`<polyline class="orbit-line ${special ? "special" : ""}" data-edge-from="${node.id}" data-edge-to="${targetId}" points="${a.x},${a.y} ${(a.x+b.x)/2},${(a.y+b.y)/2} ${b.x},${b.y}" fill="none" marker-mid="url(#arrow)" />`);
       });
     });
     if (mapViewStage === 3) {
@@ -560,7 +594,7 @@
     const nodes = currentUniverse.nodes.map((node) => {
       const pos = positions[node.id];
       return `<button type="button" data-node-id="${node.id}" class="map-node ${nodeClass(node)} ${plannedNodes.has(node.id) ? "planned" : ""} ${plannedEnds.has(node.id) ? "planned-end" : ""}" style="left:${pos.x}%;top:${pos.y}%" data-hover-title="${escapeHtml(node.name)}" data-hover-text="${escapeHtml(node.description)}" aria-label="${escapeHtml(node.name+'，'+node.description)}">
-        <strong>${escapeHtml(node.short)}</strong><small class="node-effect">${escapeHtml(nodeEffect(node))}</small>
+        <strong>${escapeHtml(node.short)}</strong><small class="node-effect">${escapeHtml(compactScreen.matches&&!mapZoom?compactNodeEffect(node):nodeEffect(node))}</small>
       </button>`;
     }).join("");
 
@@ -588,7 +622,7 @@
       <div class="node-layer">${nodes}</div><div class="token-layer">${tokens.join("")}</div>`;
     els.mapStage.querySelectorAll("[data-node-id]").forEach(b=>b.addEventListener("click",()=>renderNodeDetail(mapViewStage,b.dataset.nodeId)));
     bindHoverDetails(els.mapStage);
-    requestAnimationFrame(positionMapTokens);
+    requestAnimationFrame(layoutMap);
     const focusKey=mapViewStage+'|'+state.players.map(p=>p.stage+':'+p.position).join('|');
     if(focusKey!==mapFocusKey){mapFocusKey=focusKey;requestAnimationFrame(focusMapOnPlayer);}
   }
@@ -600,6 +634,10 @@
     const nodes=[...map.querySelectorAll('[data-node-id]')].map(n=>({...rect(n),id:n.dataset.nodeId}));
     const groups=new Map();
     map.querySelectorAll('[data-token-node]').forEach(t=>{const id=t.dataset.tokenNode;if(!groups.has(id))groups.set(id,[]);groups.get(id).push(t);});
+    if(compactScreen.matches&&!mapZoom){
+      for(const [id,tokens] of groups){const anchor=nodes.find(n=>n.id===id);tokens.forEach((t,i)=>{const radius=t.offsetWidth/2;t.style.left=Math.max(radius+2,Math.min(width-radius-2,anchor.right-radius-2-i*(radius*2+2)))+'px';t.style.top=Math.max(radius+2,Math.min(height-radius-2,anchor.bottom+radius/2))+'px';});}
+      map.querySelector('.token-connectors').innerHTML='';return;
+    }
     const occupied=[...nodes], leaders=[];
     for(const [id,tokens] of groups){
       const anchor=nodes.find(n=>n.id===id), radius=tokens[0].offsetWidth/2, gap=radius*2+5;
@@ -876,14 +914,18 @@
     els.deckCount.textContent=`常规 ${state.regularDeck.length} / 机遇 ${state.opportunityDeck.length}`;
     els.playerList.innerHTML=state.players.map((p,index)=>{
       const n=Engine.nodeById(p.stage,p.position),needed=p.stage<3?Engine.requiredStageWarp(state,p.stage):Engine.requiredEscapeWarp(state);
-      return `<article class="player-row ${focus?.id===p.id?'active':''} ${p.escaped?'escaped':''}" style="--player-color:${p.color}">
+      return `<article class="player-row ${p.id===HUMAN_ID?'human-row':'opponent-row'} ${focus?.id===p.id?'active':''} ${p.escaped?'escaped':''}" style="--player-color:${p.color}">
         <div class="pilot-heading"><span class="pilot-emblem">${p.id===HUMAN_ID?'你':'AI'}</span><div><strong title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</strong><small>${p.withdrawn?'已认输':p.escaped?'已逃离':'宇宙'+p.stage+' · '+escapeHtml(n.short)}</small></div><div class="status-badges">${statusBadges(p,index)}</div></div>
-        <div class="hud-resources"><span title="能源为0会跳轮">能源 <b>${p.energy}<small>/10</small></b></span><span title="用于交易和购买曲速">动力 <b>${p.power}</b></span><span class="warp-resource" title="曲速没有库存上限。跨阶仅支付所需数量，余量保留。">曲速 <b>${p.warp}</b><small>${p.stage<3?'下阶':'逃离'}需${needed}</small></span><span>手牌 <b>${p.hand.length}</b></span></div>
-        <div class="equipment-rack">${Object.entries(slots).map(([slot,label])=>{const id=p.equipment[slot],c=id&&Engine.cardById(id);return `<button class="equipment-slot ${c?'occupied':'empty'}" data-equipment-player="${p.id}" data-equipment-slot="${slot}" type="button" aria-controls="equipmentPopover" aria-expanded="false" aria-label="${escapeHtml(p.name+'，'+label+'槽，'+(c?c.name+'，'+c.description:'未装备'))}" data-hover-title="${escapeHtml(label+'槽 · '+(c?c.name:'未装备'))}" data-hover-text="${escapeHtml(c?c.description:'可装备一件'+label+'装备。点击查看全部装备。')}"><span class="slot-label">${label}</span><strong class="slot-name">${c?escapeHtml(c.name):'未装备'}</strong><small class="slot-effect">${c?escapeHtml(equipmentSummary(c)):'等待装配'}</small></button>`;}).join('')}</div>
+        <div class="hud-resources"><span title="能源为0会跳轮"><span class="resource-label" data-short="能">能源</span> <b>${p.energy}<small>/10</small></b></span><span title="用于交易和购买曲速"><span class="resource-label" data-short="动">动力</span> <b>${p.power}</b></span><span class="warp-resource" title="曲速没有库存上限。跨阶仅支付所需数量，余量保留。"><span class="resource-label" data-short="曲">曲速</span> <b>${p.warp}</b><small>${p.stage<3?'下阶':'逃离'}需${needed}</small></span><span><span class="resource-label" data-short="手">手牌</span> <b>${p.hand.length}</b></span></div>
+        ${p.id===AI_ID?'<button class="opponent-equipment-button ghost-button" type="button" aria-label="查看对手状态与全部装备">详情</button>':''}<div class="equipment-rack">${Object.entries(slots).map(([slot,label])=>{const id=p.equipment[slot],c=id&&Engine.cardById(id);return `<button class="equipment-slot ${c?'occupied':'empty'}" data-equipment-player="${p.id}" data-equipment-slot="${slot}" type="button" aria-controls="equipmentPopover" aria-expanded="false" aria-label="${escapeHtml(p.name+'，'+label+'槽，'+(c?c.name+'，'+c.description:'未装备'))}" data-hover-title="${escapeHtml(label+'槽 · '+(c?c.name:'未装备'))}" data-hover-text="${escapeHtml(c?c.description:'可装备一件'+label+'装备。点击查看全部装备。')}"><span class="slot-label">${label}</span><strong class="slot-name">${c?escapeHtml(c.name):'未装备'}</strong><small class="slot-effect">${c?escapeHtml(equipmentSummary(c)):'等待装配'}</small></button>`;}).join('')}</div>
       </article>`;
     }).join('');
     els.playerList.querySelectorAll('[data-equipment-player]').forEach(b=>b.addEventListener('click',()=>openEquipment(b.dataset.equipmentPlayer,b.dataset.equipmentSlot,b)));
     bindHoverDetails(els.playerList);
+    $('.opponent-equipment-button')?.addEventListener('click',()=>{
+      const p=playerById(AI_ID);$('#equipmentTitle').textContent=p.name+' · 公开状态';
+      $('#equipmentBody').innerHTML='<p>宇宙'+p.stage+' · '+escapeHtml(Engine.nodeById(p.stage,p.position).name)+'</p><p>'+statusBadges(p,1)+'</p>'+Object.entries(slots).map(([slot,label])=>{const c=p.equipment[slot]&&Engine.cardById(p.equipment[slot]);return '<section class="opponent-equipment-detail"><h3>'+label+' · '+(c?escapeHtml(c.name):'未装备')+'</h3><p>'+(c?escapeHtml(c.description):'此槽为空')+'</p></section>';}).join('');$('#equipmentDialog').showModal();
+    });
     const human=playerById(HUMAN_ID);
     $('#concedeButton').disabled=human.escaped||Boolean(state.duelResult)||!['roll','choose','personal','response'].includes(state.phase)||(['personal','response'].includes(state.phase)&&currentFocusPlayer()?.id!==HUMAN_ID);
   }
@@ -947,6 +989,7 @@
 
   function renderHand() {
     const scrollLeft=els.hand.scrollLeft;
+    const previous=els.hand.querySelector('.selected'),draftId=previous?.dataset.cardId||playerById(HUMAN_ID)?.hand[selectedHand],draft=previous?[...previous.querySelectorAll('select')].map(n=>n.value):(cardDrafts.get(draftId)||[]);
     const p=playerById(HUMAN_ID),personal=state.phase==='personal'&&Engine.currentPersonalPlayer(state)?.id===HUMAN_ID,discarding=personal&&state.mustDiscard;
     const responding=state.phase==='response'&&Engine.currentResponder(state)?.id===HUMAN_ID, available=responding?Engine.availableResponses(state):[];
     if(discarding)setHandFolded(false);
@@ -962,7 +1005,10 @@
     els.turnActions.innerHTML=personal&&!discarding?'<button class="primary-button" id="endTurnButton" type="button">结束回合 →</button>':discarding?'<span class="discard-counter">还需弃'+Math.max(0,p.hand.length-3)+'张</span>':responding?'<button class="secondary-button" id="passResponseInHand" type="button">暂不响应 →</button>':'<span class="hand-note">完整牌面 · 横向滑动浏览</span>';
     $('#endTurnButton')?.addEventListener('click',()=>safeAction(()=>Engine.endPersonalTurn(state),true));
     $('#passResponseInHand')?.addEventListener('click',()=>safeAction(()=>Engine.passResponse(state),true));
+    const selected=els.hand.querySelector('.selected');
+    if(selected&&selected.dataset.cardId===draftId)selected.querySelectorAll('select').forEach((n,i)=>{if([...n.options].some(o=>o.value===draft[i]))n.value=draft[i];});
     bindCardActions();els.hand.scrollLeft=scrollLeft;
+    $('#toggleHandButton').textContent=document.body.classList.contains('hand-folded')?'手牌 '+p.hand.length+' ↑':'收起手牌 ↓';
   }
 
   function renderLog() {
@@ -1024,7 +1070,8 @@
     });
     voyageStarted = true;
     selectedHand = null;
-    setHandFolded(phoneLandscape.matches);
+    cardDrafts.clear();
+    setHandFolded(compactScreen.matches);
     state.duel = true;
     state.aiMode = 'local';
     state.aiHistory = [];
@@ -1054,10 +1101,12 @@
   els.rulesDialog.addEventListener("close", scheduleAi);
   $('#toggleHandButton').addEventListener('click',()=>setHandFolded(!document.body.classList.contains('hand-folded')));
   $('#handBackdrop').addEventListener('click',()=>setHandFolded(true));
-  $('#continuePortrait').addEventListener('click',()=>{portraitAllowed=true;$('#orientationDialog').close();});
-  $('#orientationDialog').addEventListener('close',()=>{if(phonePortrait.matches)portraitAllowed=true;});
+  els.hand.addEventListener('change',e=>{const card=e.target.closest('.game-card.selected');if(card&&!card.querySelector('[data-annihilate-target]'))cardDrafts.set(card.dataset.cardId,[...card.querySelectorAll('select')].map(n=>n.value));});
+  $('#mapZoomButton').addEventListener('click',()=>{mapZoom=!mapZoom;renderMap();requestAnimationFrame(focusMapOnPlayer);});
+  $('#mapFocusButton').addEventListener('click',focusMapOnPlayer);
   phoneLandscape.addEventListener('change',syncPhoneLayout);
-  phonePortrait.addEventListener('change',syncPhoneLayout);
+  compactScreen.addEventListener('change',syncPhoneLayout);
+  let resizeFrame;window.addEventListener('resize',()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{layoutMap();focusMapOnPlayer();});});
   $('#fullscreenButton').hidden=!document.documentElement.requestFullscreen;
   $('#fullscreenButton').addEventListener('click',async()=>{
     try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}
@@ -1070,7 +1119,7 @@
   window.addEventListener('resize',positionEquipmentPopover);
   document.addEventListener('click',e=>{
     if(!e.target.closest('#equipmentPopover, .equipment-slot'))closeEquipmentPopover();
-    if(selectedHand!==null&&!e.target.closest('.game-card, #equipmentPopover, .equipment-slot, #showResponseHand, dialog')){
+    if(selectedHand!==null&&!e.target.closest('.game-card, .hand-panel, .map-panel, .topbar, #equipmentPopover, .equipment-slot, #showResponseHand, dialog')){
       selectedHand=null;renderHand();
     }
   });
@@ -1081,7 +1130,7 @@
     dialog.addEventListener('click',e=>{if(pressedOutside&&e.target===dialog&&outside(e)&&(dialog.id!=='setupDialog'||voyageStarted))dialog.close();pressedOutside=false;});
     dialog.addEventListener('cancel',e=>{if(dialog.id==='setupDialog'&&!voyageStarted)e.preventDefault();});
   });
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]')){hideHoverDetail();if(!$('#equipmentPopover').hidden){closeEquipmentPopover(true);return;}const index=selectedHand;if(index===null&&phoneLandscape.matches&&!document.body.classList.contains('hand-folded')){setHandFolded(true);$('#toggleHandButton').focus({preventScroll:true});return;}selectedHand=null;renderHand();els.hand.querySelector('[data-card-index="'+index+'"] .card-face')?.focus({preventScroll:true});}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]')){hideHoverDetail();if(!$('#equipmentPopover').hidden){closeEquipmentPopover(true);return;}const index=selectedHand;if(index===null&&compactScreen.matches&&!document.body.classList.contains('hand-folded')){setHandFolded(true);$('#toggleHandButton').focus({preventScroll:true});return;}selectedHand=null;renderHand();els.hand.querySelector('[data-card-index="'+index+'"] .card-face')?.focus({preventScroll:true});}});
   els.restoreAutoButton.addEventListener("click", () => {
     try {
       restoreFromStorage(AUTO_STORAGE_KEY, "自动存档");
@@ -1136,7 +1185,7 @@
       if (!window.confirm("导入会替换当前局面；如需保留，请先导出当前存档。是否继续？")) return;
       const restored = normalizeRestoredState(JSON.parse(await file.text()));
       cancelAi();
-      state = restored;
+      state = restored; cardDrafts.clear();
       voyageStarted = true;
       selectedHand = null;
       privacyUnlockedKey = null;

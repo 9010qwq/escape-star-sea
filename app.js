@@ -19,7 +19,8 @@
   let equipmentAnchor = null;
   const phoneLandscape = matchMedia('(max-width:1120px) and (min-aspect-ratio:3/2)');
   const compactScreen = matchMedia('(max-width:1120px)');
-  let mapZoom = false;
+  let mapZoom = true;
+  let selectedMapNode = null;
   function syncPhoneLayout() {
     const wasCompact=document.body.classList.contains('compact-ui');
     document.body.classList.toggle('compact-ui',compactScreen.matches);
@@ -43,6 +44,7 @@
   function hideHoverDetail() { $('#hoverDetail').hidden=true; }
   
   function showHoverDetail(target) {
+    if(compactScreen.matches)return;
     if(document.querySelector('dialog[open]')||!$('#equipmentPopover').hidden)return;
     const box=$('#hoverDetail');
     box.innerHTML='<strong>'+escapeHtml(target.dataset.hoverTitle)+'</strong><p>'+escapeHtml(target.dataset.hoverText)+'</p>';
@@ -156,6 +158,8 @@
 
   function renderNodeDetail(stage,id) {
     const n=Engine.nodeById(stage,id);
+    selectedMapNode=id;
+    els.mapStage.querySelectorAll('[data-node-id]').forEach(b=>b.classList.toggle('inspected',b.dataset.nodeId===id));
     $('#nodeDetail').innerHTML='<strong>'+escapeHtml(n.name)+'</strong><span>'+escapeHtml(n.description)+'</span>';
     hideHoverDetail();
     $('#nodeDialogTitle').textContent=n.name;
@@ -493,30 +497,7 @@
   }
 
   function nodePositions(stageNumber) {
-    const currentUniverse = Engine.universe(stageNumber);
-    const result = {};
-    if(compactScreen.matches){
-      const landscape=phoneLandscape.matches,cols=landscape?6:4,rows=landscape?4:6;
-      let cells=[];
-      if(stageNumber===3){
-        const scheme=landscape?[[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[5,1],[5,3],[0,3],[1,3],[2,3],[3,3],[0,2],[0,1],[1,1],[2,1],[3,2],[4,2]]:[[0,0],[1,0],[2,0],[3,0],[3,1],[3,2],[3,3],[3,5],[0,4],[1,5],[2,5],[2,4],[0,3],[0,2],[0,1],[1,2],[1,3],[2,3]];
-        cells=scheme;
-      }else{
-        for(let x=0;x<cols;x++)cells.push([x,0]);for(let y=1;y<rows;y++)cells.push([cols-1,y]);for(let x=cols-2;x>=0;x--)cells.push([x,rows-1]);for(let y=rows-2;y>0;y--)cells.push([0,y]);
-      }
-      currentUniverse.nodes.forEach((node,i)=>{const [x,y]=cells[i];result[node.id]={x:(landscape?9:12)+x*(landscape?82:76)/(cols-1),y:(landscape?12:9)+y*(landscape?76:82)/(rows-1)};});
-      els.mapStage.style.setProperty('--map-cols',cols);
-      return result;
-    }
-    if (stageNumber === 3) {
-      currentUniverse.nodes.forEach((node) => { result[node.id] = { x: Math.max(12, Math.min(88, node.x)), y: Math.max(9, Math.min(91, node.y)) }; });
-      return result;
-    }
-    currentUniverse.nodes.forEach((node, index) => {
-      const angle = -Math.PI / 2 + (Math.PI * 2 * index) / currentUniverse.nodes.length;
-      result[node.id] = { x: 50 + Math.cos(angle) * 38, y: 50 + Math.sin(angle) * 36 };
-    });
-    return result;
+    return window.StarSeaMapArt.positions(stageNumber);
   }
 
   function nodeClass(node) {
@@ -541,13 +522,18 @@
 
   function layoutMap() {
     const viewport=$('.map-viewport');
-    if(compactScreen.matches){
-      els.mapStage.classList.toggle('overview',!mapZoom);
-      els.mapStage.style.width=(mapZoom?Math.max(900,viewport.clientWidth):viewport.clientWidth)+'px';
-      els.mapStage.style.height=(mapZoom?Math.max(phoneLandscape.matches?500:680,viewport.clientHeight):viewport.clientHeight)+'px';
-    }else{els.mapStage.classList.remove('overview');els.mapStage.style.width='';els.mapStage.style.height='';}
-    $('#mapZoomButton').textContent=mapZoom?'全图':'放大';
+    if(!viewport.clientWidth)return;
+    const ratio=({1:660,2:570,3:700}[mapViewStage])/911;
+    const overviewHeight=document.body.classList.contains('map-focused')?viewport.clientHeight:compactScreen.matches?550:Math.max(480,Math.min(780,innerHeight*.6));
+    const size=mapZoom?Math.max(820,viewport.clientWidth):Math.min(viewport.clientWidth,overviewHeight/ratio);
+    viewport.classList.toggle('is-overview',!mapZoom);
+    els.mapStage.classList.toggle('overview',!mapZoom);
+    els.mapStage.style.width=size+'px';
+    els.mapStage.style.height=(size*ratio)+'px';
+    els.mapStage.style.setProperty('--node-size',(mapZoom?Math.min(108,size/9.6):Math.max(44,size/10.5))+'px');
+    $('#mapZoomButton').textContent=mapZoom?'全图总览':'近看格面';
     $('#mapZoomButton').setAttribute('aria-pressed',String(mapZoom));
+    $('#mapScaleHint').textContent=mapZoom?'近看 · 滑动星图，点格查看完整效果':'总览 · 点格查看详情，近看显示格面效果';
     positionMapTokens();
   }
 
@@ -572,14 +558,23 @@
       node.next.forEach((targetId) => {
         const a = positions[node.id];
         const b = positions[targetId];
-        const special = node.kind.startsWith("wormhole") || node.kind.startsWith("tunnel") || node.next.length > 1;
-        lines.push(`<polyline class="orbit-line ${special ? "special" : ""}" data-edge-from="${node.id}" data-edge-to="${targetId}" points="${a.x},${a.y} ${(a.x+b.x)/2},${(a.y+b.y)/2} ${b.x},${b.y}" fill="none" marker-mid="url(#arrow)" />`);
+        const points=node.oneWayEye ? `${a.x},${a.y} 97,${a.y} 97,3 3,3 3,${b.y} ${b.x},${b.y}` : `${a.x},${a.y} ${(a.x+b.x)/2},${(a.y+b.y)/2} ${b.x},${b.y}`;
+        lines.push(`<polyline class="orbit-line" data-edge-from="${node.id}" data-edge-to="${targetId}" points="${points}" fill="none" marker-mid="url(#arrow)" />`);
       });
     });
-    if (mapViewStage === 3) {
-      const a = positions.s3_tunnel_ur;
-      const b = positions.s3_tunnel_ll;
-      lines.push(`<line class="orbit-line special" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" />`);
+    const linked=new Set();
+    currentUniverse.nodes.forEach(node=>{
+      if(!node.pair||node.oneWayEye)return;
+      const key=[node.id,node.pair].sort().join('|');if(linked.has(key))return;linked.add(key);
+      const a=positions[node.id],b=positions[node.pair];
+      if(node.kind==='tunnel'){
+        const lo=positions.s3_tunnel_ll,hi=positions.s3_tunnel_ur;
+        lines.push('<path class="orbit-line transport" d="M'+lo.x+','+lo.y+' Q46,90 50,75 Q60,68 60,54 Q60,30 '+hi.x+','+hi.y+'" fill="none"/>');
+      }else lines.push('<line class="orbit-line transport" x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" />');
+    });
+    if(mapViewStage===3){
+      const a=positions.s3_worm_lr,b=positions.s3_eye,c=positions.s3_worm_ul;
+      lines.push('<polyline class="orbit-line transport" points="'+a.x+','+a.y+' '+(a.x+b.x)/2+','+(a.y+b.y)/2+' '+b.x+','+b.y+' '+(b.x+c.x)/2+','+(b.y+c.y)/2+' '+c.x+','+c.y+'" fill="none" marker-mid="url(#transport-arrow)"/>');
     }
 
     const plannedNodes = new Set();
@@ -593,8 +588,8 @@
     }
     const nodes = currentUniverse.nodes.map((node) => {
       const pos = positions[node.id];
-      return `<button type="button" data-node-id="${node.id}" class="map-node ${nodeClass(node)} ${plannedNodes.has(node.id) ? "planned" : ""} ${plannedEnds.has(node.id) ? "planned-end" : ""}" style="left:${pos.x}%;top:${pos.y}%" data-hover-title="${escapeHtml(node.name)}" data-hover-text="${escapeHtml(node.description)}" aria-label="${escapeHtml(node.name+'，'+node.description)}">
-        <strong>${escapeHtml(node.short)}</strong><small class="node-effect">${escapeHtml(compactScreen.matches&&!mapZoom?compactNodeEffect(node):nodeEffect(node))}</small>
+      return `<button type="button" data-node-id="${node.id}" class="map-node ${nodeClass(node)} ${plannedNodes.has(node.id) ? "planned" : ""} ${plannedEnds.has(node.id) ? "planned-end" : ""} ${selectedMapNode===node.id?"inspected":""}" style="left:${pos.x}%;top:${pos.y}%" data-hover-title="${escapeHtml(node.name)}" data-hover-text="${escapeHtml(node.description)}" aria-label="${escapeHtml(node.name+'，'+node.description)}">
+        <strong>${escapeHtml(node.short)}</strong><small class="node-effect">${escapeHtml(nodeEffect(node))}</small>
       </button>`;
     }).join("");
 
@@ -612,15 +607,22 @@
       });
     });
 
-    els.mapStage.className = `map-stage stage-${mapViewStage}`;
+    els.mapStage.className = `map-stage art-map stage-${mapViewStage}`;
     els.mapStage.innerHTML = `
+      ${window.StarSeaMapArt.art[mapViewStage]}
       <svg class="orbit-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        <defs><marker id="arrow" markerWidth="4" markerHeight="4" refX="3.3" refY="2" orient="auto"><path d="M0,0 L4,2 L0,4 z" fill="rgba(115,213,255,.62)"/></marker></defs>
+        <defs><marker id="arrow" markerWidth="4" markerHeight="4" refX="3.3" refY="2" orient="auto"><path d="M0,0 L4,2 L0,4 z" fill="rgba(232,233,233,.84)"/></marker><marker id="transport-arrow" markerWidth="4" markerHeight="4" refX="3.3" refY="2" orient="auto"><path d="M0,0 L4,2 L0,4 z" fill="#f4b759"/></marker></defs>
         ${lines.join("")}
       </svg>
       <svg class="token-connectors" aria-hidden="true"></svg>
       <div class="node-layer">${nodes}</div><div class="token-layer">${tokens.join("")}</div>`;
     els.mapStage.querySelectorAll("[data-node-id]").forEach(b=>b.addEventListener("click",()=>renderNodeDetail(mapViewStage,b.dataset.nodeId)));
+    if(state.phase==='choose'&&state.choices[HUMAN_ID]&&playerById(HUMAN_ID).stage===mapViewStage){
+      const preview=Engine.previewMovement(state,HUMAN_ID),ids=[playerById(HUMAN_ID).position,...preview.nodeIds];
+      for(let i=1;i<ids.length;i++)els.mapStage.querySelectorAll('[data-edge-from]').forEach(edge=>{
+        if(edge.dataset.edgeFrom===ids[i-1]&&edge.dataset.edgeTo===ids[i])edge.classList.add('route-planned');
+      });
+    }
     bindHoverDetails(els.mapStage);
     requestAnimationFrame(layoutMap);
     const focusKey=mapViewStage+'|'+state.players.map(p=>p.stage+':'+p.position).join('|');
@@ -634,7 +636,7 @@
     const nodes=[...map.querySelectorAll('[data-node-id]')].map(n=>({...rect(n),id:n.dataset.nodeId}));
     const groups=new Map();
     map.querySelectorAll('[data-token-node]').forEach(t=>{const id=t.dataset.tokenNode;if(!groups.has(id))groups.set(id,[]);groups.get(id).push(t);});
-    if(compactScreen.matches&&!mapZoom){
+    if(!mapZoom){
       for(const [id,tokens] of groups){const anchor=nodes.find(n=>n.id===id);tokens.forEach((t,i)=>{const radius=t.offsetWidth/2;t.style.left=Math.max(radius+2,Math.min(width-radius-2,anchor.right-radius-2-i*(radius*2+2)))+'px';t.style.top=Math.max(radius+2,Math.min(height-radius-2,anchor.bottom+radius/2))+'px';});}
       map.querySelector('.token-connectors').innerHTML='';return;
     }
@@ -1102,10 +1104,13 @@
   $('#toggleHandButton').addEventListener('click',()=>setHandFolded(!document.body.classList.contains('hand-folded')));
   $('#handBackdrop').addEventListener('click',()=>setHandFolded(true));
   els.hand.addEventListener('change',e=>{const card=e.target.closest('.game-card.selected');if(card&&!card.querySelector('[data-annihilate-target]'))cardDrafts.set(card.dataset.cardId,[...card.querySelectorAll('select')].map(n=>n.value));});
-  $('#mapZoomButton').addEventListener('click',()=>{mapZoom=!mapZoom;renderMap();requestAnimationFrame(focusMapOnPlayer);});
-  $('#mapFocusButton').addEventListener('click',focusMapOnPlayer);
+  $('#mapZoomButton').addEventListener('click',()=>{mapZoom=!mapZoom;renderMap();requestAnimationFrame(()=>{if(mapZoom)focusMapOnPlayer();else $('.map-viewport').scrollTo({left:0,top:0,behavior:'instant'});});});
+  $('#mapFocusButton').addEventListener('click',()=>{if(!state)return;const p=playerById(HUMAN_ID);mapViewStage=p.stage;mapZoom=true;renderMap();requestAnimationFrame(focusMapOnPlayer);});
   phoneLandscape.addEventListener('change',syncPhoneLayout);
   compactScreen.addEventListener('change',syncPhoneLayout);
+  function setMapFocused(value){document.body.classList.toggle('map-focused',value);$('#mapExpandButton').textContent=value?'返回对局':'专注星图';$('#mapExpandButton').setAttribute('aria-expanded',String(value));requestAnimationFrame(()=>{layoutMap();if(mapZoom)focusMapOnPlayer();});}
+  $('#mapExpandButton').onclick=()=>setMapFocused(!document.body.classList.contains('map-focused'));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]'))setMapFocused(false);});
   let resizeFrame;window.addEventListener('resize',()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{layoutMap();focusMapOnPlayer();});});
   $('#fullscreenButton').hidden=!document.documentElement.requestFullscreen;
   $('#fullscreenButton').addEventListener('click',async()=>{

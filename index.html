@@ -7,30 +7,31 @@
     <title>逃离星海 · 人机对战试玩</title>
     <meta name="description" content="与星海领航员进行一对一桌游对战。掷骰航行、经营装备、把握反击时机，穿越三层宇宙。打开即玩，无需登录。">
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=1.0.2" />
-    <link rel="stylesheet" href="responsive.css?v=1.0.2" />
+    <link rel="stylesheet" href="styles.css?v=1.0.3" />
+    <link rel="stylesheet" href="responsive.css?v=1.0.3" />
+    <link rel="stylesheet" href="map-art.css?v=1.0.3" />
   </head>
   <body>
     <div class="starfield" aria-hidden="true"></div>
     <main class="app-shell">
-      <header class="topbar"><div class="brand"><span class="brand-mark">✦</span><h1>逃离星海</h1><span class="duel-label">星图对决 · 1.0.2</span></div><span id="opponentActivity" class="opponent-activity" role="status">等待启航</span><nav class="top-actions"><button class="ghost-button" id="fullscreenButton" type="button" hidden>全屏</button><button class="ghost-button" id="rulesButton" type="button">怎么玩</button><button class="ghost-button" id="logButton" type="button">记录</button><button class="ghost-button" id="menuButton" type="button">菜单 ☰</button></nav></header>
+      <header class="topbar"><div class="brand"><span class="brand-mark">✦</span><h1>逃离星海</h1><span class="duel-label">星图对决 · 1.0.3</span></div><span id="opponentActivity" class="opponent-activity" role="status">等待启航</span><nav class="top-actions"><button class="ghost-button" id="fullscreenButton" type="button" hidden>全屏</button><button class="ghost-button" id="rulesButton" type="button">怎么玩</button><button class="ghost-button" id="logButton" type="button">记录</button><button class="ghost-button" id="menuButton" type="button">菜单 ☰</button></nav></header>
       <section class="status-strip" id="playerList" aria-label="双方资源与装备"></section>
       <nav class="mobile-view-tabs" aria-label="切换对战视图"><button type="button" data-mobile-view="action" class="active">当前操作</button><button type="button" data-mobile-view="map">查看地图</button></nav>
       <section class="play-area">
-        <section class="map-panel panel"><div class="map-header"><h2 id="mapTitle">第一宇宙</h2><div id="mapTabs" class="map-tabs"></div><div class="map-tools"><button class="ghost-button" id="mapZoomButton" type="button" aria-pressed="false">放大</button><button class="ghost-button" id="mapFocusButton" type="button">定位</button></div></div><p class="map-scroll-hint">总览看路线 · 点格看完整效果 · 放大后可滑动</p><div class="map-viewport" tabindex="0" aria-label="星图，可滚动查看"><div class="map-stage" id="mapStage"></div></div><div class="node-detail" id="nodeDetail" aria-live="polite"><strong>航行地图</strong><span>能＝能源，动＝动力。格面显示基础效果；悬停或点选查看完整规则。</span></div></section>
+        <section class="map-panel panel"><div class="map-header"><h2 id="mapTitle">第一宇宙</h2><div id="mapTabs" class="map-tabs"></div><div class="map-tools"><button class="ghost-button" id="mapZoomButton" type="button" aria-pressed="false">放大</button><button class="ghost-button" id="mapFocusButton" type="button">定位</button><button class="ghost-button" id="mapExpandButton" type="button" aria-expanded="false">专注星图</button></div></div><p class="map-scroll-hint" id="mapScaleHint">近看 · 滑动星图，点格查看完整效果</p><div class="map-legend"><span>─ 航行方向</span><span class="transport-key">┄ 条件传送</span><span class="planned-key">● 计划落点</span></div><div class="map-viewport" tabindex="0" aria-label="星图，可滚动查看"><div class="map-stage" id="mapStage"></div></div><div class="node-detail" id="nodeDetail" aria-live="polite"><strong>航行地图</strong><span>点选星域查看完整效果。能＝能源，动＝动力。</span></div><p class="map-art-note"><a href="map-source.html" target="_blank" rel="noopener">查看桌游原图与接入说明 ↗</a></p></section>
         <aside class="round-card panel"><div class="round-meta"><span>第 <strong id="roundValue">1</strong> 轮</span><span id="modeValue">快速</span><span id="rollerValue" hidden></span></div><div class="phase-title-wrap"><span class="phase-number" id="phaseNumber">01</span><h2 id="phaseTitle">公开掷骰</h2></div><details class="phase-explanation"><summary>本阶段规则与时序</summary><p class="phase-help" id="phaseHelp"></p></details><div id="phaseControls"></div></aside>
       </section>
       <section class="hand-panel panel"><div class="hand-toolbar"><h2 id="handTitle">你的手牌</h2><span class="hand-count" id="handCount">0张</span><button id="toggleHandButton" class="ghost-button" type="button" aria-expanded="true" aria-controls="hand">收起手牌 ↓</button><div class="turn-actions" id="turnActions"></div></div><div class="hand" id="hand"></div></section>
     </main>
     <div id="phaseRail" hidden></div><div id="rankingList" hidden></div>
-    <dialog id="menuDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2>对局菜单</h2><button data-close="menuDialog" class="ghost-button" type="button">返回对局 ×</button></div><div class="menu-actions"><button class="ghost-button" id="saveButton" type="button">保存局面</button><button class="ghost-button" id="loadButton" type="button">读取局面</button><button class="ghost-button" id="exportButton" type="button">导出存档</button><button class="ghost-button" id="importButton" type="button">导入存档</button><input id="importInput" type="file" accept="application/json,.json" hidden><button class="ghost-button" id="newButton" type="button">新对局</button><button class="danger-button" id="concedeButton" type="button">认输结束</button></div><p class="menu-note">对手：星海领航员 · 本地策略 AI</p><p id="aiStatus" role="status">本地策略已就绪</p><p class="meta-label" id="lastAiAction">等待启航</p><p class="menu-note">每次操作自动保存到当前浏览器。AI只使用自己的手牌和公开局面。对局可从菜单导出备份。</p><p class="meta-label">剩余牌库：<span id="deckCount"></span> · 版本 1.0.2</p></div></dialog>
+    <dialog id="menuDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2>对局菜单</h2><button data-close="menuDialog" class="ghost-button" type="button">返回对局 ×</button></div><div class="menu-actions"><button class="ghost-button" id="saveButton" type="button">保存局面</button><button class="ghost-button" id="loadButton" type="button">读取局面</button><button class="ghost-button" id="exportButton" type="button">导出存档</button><button class="ghost-button" id="importButton" type="button">导入存档</button><input id="importInput" type="file" accept="application/json,.json" hidden><button class="ghost-button" id="newButton" type="button">新对局</button><button class="danger-button" id="concedeButton" type="button">认输结束</button></div><p class="menu-note">对手：星海领航员 · 本地策略 AI</p><p id="aiStatus" role="status">本地策略已就绪</p><p class="meta-label" id="lastAiAction">等待启航</p><p class="menu-note">每次操作自动保存到当前浏览器。AI只使用自己的手牌和公开局面。对局可从菜单导出备份。</p><p class="meta-label">剩余牌库：<span id="deckCount"></span> · 版本 1.0.3</p></div></dialog>
     <dialog id="logDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2>本局记录</h2><button data-close="logDialog" class="ghost-button" type="button">返回对局 ×</button></div><details id="aiReview" class="ai-review" hidden><summary>赛后 AI 复盘</summary><ol id="aiReviewList"></ol></details><ol id="eventLog" class="event-log"></ol></div></dialog>
     <dialog id="equipmentDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2 id="equipmentTitle">装备</h2><button data-close="equipmentDialog" class="ghost-button" type="button">返回 ×</button></div><div id="equipmentBody"></div></div></dialog>
     <dialog id="cardInfoDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2 id="cardInfoTitle">牌面</h2><button data-close="cardInfoDialog" class="ghost-button" type="button">返回 ×</button></div><p id="cardInfoBody"></p><p class="menu-note" id="cardInfoHint"></p></div></dialog>
 
     <dialog class="modal" id="setupDialog">
       <form method="dialog" id="setupForm">
-        <p class="eyebrow">ESCAPE THE SEA OF STARS · 1.0.2</p>
+        <p class="eyebrow">ESCAPE THE SEA OF STARS · 1.0.3</p>
         <h2>向宇宙之眼启航</h2>
         <p>一名玩家，一位领航员。经营资源，留下关键的反击，寻找逃离星海的路线。</p>
         <input type="hidden" id="playerCount" value="2"><input type="hidden" id="privacyMode" value="off">
@@ -106,6 +107,7 @@
     <script src="game-core.js"></script>
     <script src="game-ai.js"></script>
     <script src="duel-session.js"></script>
-    <script src="app.js?v=1.0.2"></script>
+    <script src="map-art.js?v=1.0.3"></script>
+    <script src="app.js?v=1.0.3"></script>
   </body>
 </html>

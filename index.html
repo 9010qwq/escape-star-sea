@@ -7,31 +7,32 @@
     <title>逃离星海 · 人机对战试玩</title>
     <meta name="description" content="与星海领航员进行一对一桌游对战。掷骰航行、经营装备、把握反击时机，穿越三层宇宙。打开即玩，无需登录。">
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=1.0.3" />
-    <link rel="stylesheet" href="responsive.css?v=1.0.3" />
-    <link rel="stylesheet" href="map-art.css?v=1.0.3" />
+    <link rel="stylesheet" href="styles.css?v=1.0.5-solo-friends" />
+    <link rel="stylesheet" href="responsive.css?v=1.0.5-solo-friends" />
+    <link rel="stylesheet" href="map-art.css?v=1.0.5-solo-friends" />
+  <link rel="stylesheet" href="product-ui.css?v=1.0.5-solo-friends"><link rel="stylesheet" href="flight-guide.css?v=1.0.5-solo-friends">
   </head>
   <body>
     <div class="starfield" aria-hidden="true"></div>
     <main class="app-shell">
-      <header class="topbar"><div class="brand"><span class="brand-mark">✦</span><h1>逃离星海</h1><span class="duel-label">星图对决 · 1.0.3</span></div><span id="opponentActivity" class="opponent-activity" role="status">等待启航</span><nav class="top-actions"><button class="ghost-button" id="fullscreenButton" type="button" hidden>全屏</button><button class="ghost-button" id="rulesButton" type="button">怎么玩</button><button class="ghost-button" id="logButton" type="button">记录</button><button class="ghost-button" id="menuButton" type="button">菜单 ☰</button></nav></header>
+      <header class="topbar"><div class="brand"><span class="brand-mark">✦</span><h1>逃离星海</h1><span class="duel-label">星图对决 · 1.0.5-solo-friends</span></div><span id="opponentActivity" class="opponent-activity" role="status">等待启航</span><nav class="top-actions"><button class="ghost-button" id="fullscreenButton" type="button" hidden>全屏</button><button class="ghost-button" id="rulesButton" type="button">怎么玩</button><button class="ghost-button" id="logButton" type="button">记录</button><button class="ghost-button" id="menuButton" type="button">菜单 ☰</button></nav></header>
       <section class="status-strip" id="playerList" aria-label="双方资源与装备"></section>
       <nav class="mobile-view-tabs" aria-label="切换对战视图"><button type="button" data-mobile-view="action" class="active">当前操作</button><button type="button" data-mobile-view="map">查看地图</button></nav>
       <section class="play-area">
-        <section class="map-panel panel"><div class="map-header"><h2 id="mapTitle">第一宇宙</h2><div id="mapTabs" class="map-tabs"></div><div class="map-tools"><button class="ghost-button" id="mapZoomButton" type="button" aria-pressed="false">放大</button><button class="ghost-button" id="mapFocusButton" type="button">定位</button><button class="ghost-button" id="mapExpandButton" type="button" aria-expanded="false">专注星图</button></div></div><p class="map-scroll-hint" id="mapScaleHint">近看 · 滑动星图，点格查看完整效果</p><div class="map-legend"><span>─ 航行方向</span><span class="transport-key">┄ 条件传送</span><span class="planned-key">● 计划落点</span></div><div class="map-viewport" tabindex="0" aria-label="星图，可滚动查看"><div class="map-stage" id="mapStage"></div></div><div class="node-detail" id="nodeDetail" aria-live="polite"><strong>航行地图</strong><span>点选星域查看完整效果。能＝能源，动＝动力。</span></div><p class="map-art-note"><a href="map-source.html" target="_blank" rel="noopener">查看桌游原图与接入说明 ↗</a></p></section>
+        <section class="map-panel panel"><div class="map-header"><h2 id="mapTitle">第一宇宙</h2><div id="mapTabs" class="map-tabs"></div><div class="map-tools"><button class="ghost-button" id="mapZoomButton" type="button" aria-pressed="false">放大</button><button class="ghost-button" id="mapFocusButton" type="button">定位</button><button class="ghost-button" id="mapExpandButton" type="button" aria-expanded="false">专注星图</button></div></div><p class="map-scroll-hint" id="mapScaleHint">近看 · 滑动星图，点格查看完整效果</p><div class="map-legend"><span>─ 航行方向</span><span class="transport-key">┄ 条件传送</span><span class="planned-key">● 计划落点</span></div><div class="map-viewport" tabindex="0" aria-label="星图，可滚动查看"><div class="map-stage" id="mapStage"></div></div><div class="node-detail" id="nodeDetail" aria-live="polite"><strong>航行地图</strong><span>点选星域查看完整效果。能＝能源，动＝动力。</span></div><p class="map-art-note"><a href="map-source.html" target="_blank" rel="noopener">原作地图与规则版本 ↗</a></p></section>
         <aside class="round-card panel"><div class="round-meta"><span>第 <strong id="roundValue">1</strong> 轮</span><span id="modeValue">快速</span><span id="rollerValue" hidden></span></div><div class="phase-title-wrap"><span class="phase-number" id="phaseNumber">01</span><h2 id="phaseTitle">公开掷骰</h2></div><details class="phase-explanation"><summary>本阶段规则与时序</summary><p class="phase-help" id="phaseHelp"></p></details><div id="phaseControls"></div></aside>
       </section>
       <section class="hand-panel panel"><div class="hand-toolbar"><h2 id="handTitle">你的手牌</h2><span class="hand-count" id="handCount">0张</span><button id="toggleHandButton" class="ghost-button" type="button" aria-expanded="true" aria-controls="hand">收起手牌 ↓</button><div class="turn-actions" id="turnActions"></div></div><div class="hand" id="hand"></div></section>
     </main>
     <div id="phaseRail" hidden></div><div id="rankingList" hidden></div>
-    <dialog id="menuDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2>对局菜单</h2><button data-close="menuDialog" class="ghost-button" type="button">返回对局 ×</button></div><div class="menu-actions"><button class="ghost-button" id="saveButton" type="button">保存局面</button><button class="ghost-button" id="loadButton" type="button">读取局面</button><button class="ghost-button" id="exportButton" type="button">导出存档</button><button class="ghost-button" id="importButton" type="button">导入存档</button><input id="importInput" type="file" accept="application/json,.json" hidden><button class="ghost-button" id="newButton" type="button">新对局</button><button class="danger-button" id="concedeButton" type="button">认输结束</button></div><p class="menu-note">对手：星海领航员 · 本地策略 AI</p><p id="aiStatus" role="status">本地策略已就绪</p><p class="meta-label" id="lastAiAction">等待启航</p><p class="menu-note">每次操作自动保存到当前浏览器。AI只使用自己的手牌和公开局面。对局可从菜单导出备份。</p><p class="meta-label">剩余牌库：<span id="deckCount"></span> · 版本 1.0.3</p></div></dialog>
+    <dialog id="menuDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2>对局菜单</h2><button data-close="menuDialog" class="ghost-button" type="button">返回对局 ×</button></div><div class="menu-actions"><button class="ghost-button" id="saveButton" type="button">保存局面</button><button class="ghost-button" id="loadButton" type="button">读取局面</button><button class="ghost-button" id="exportButton" type="button">导出存档</button><button class="ghost-button" id="importButton" type="button">导入存档</button><input id="importInput" type="file" accept="application/json,.json" hidden><button class="ghost-button" id="newButton" type="button">新对局</button><button class="danger-button" id="concedeButton" type="button">认输结束</button></div><p><a class="ghost-button library-link" href="library.html" target="_blank" rel="noopener">原作牌库与领航者路书 ↗</a></p><p class="menu-note">对手：星海领航员 · 本地策略 AI</p><p id="aiStatus" role="status">本地策略已就绪</p><p class="meta-label" id="lastAiAction">等待启航</p><p class="menu-note">每次操作自动保存到当前浏览器。AI只使用自己的手牌和公开局面。对局可从菜单导出备份。</p><p class="meta-label">剩余牌库：<span id="deckCount"></span> · 版本 1.0.5-solo-friends</p></div></dialog>
     <dialog id="logDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2>本局记录</h2><button data-close="logDialog" class="ghost-button" type="button">返回对局 ×</button></div><details id="aiReview" class="ai-review" hidden><summary>赛后 AI 复盘</summary><ol id="aiReviewList"></ol></details><ol id="eventLog" class="event-log"></ol></div></dialog>
     <dialog id="equipmentDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2 id="equipmentTitle">装备</h2><button data-close="equipmentDialog" class="ghost-button" type="button">返回 ×</button></div><div id="equipmentBody"></div></div></dialog>
     <dialog id="cardInfoDialog" class="modal utility-modal"><div class="rules-content"><div class="dialog-heading"><h2 id="cardInfoTitle">牌面</h2><button data-close="cardInfoDialog" class="ghost-button" type="button">返回 ×</button></div><p id="cardInfoBody"></p><p class="menu-note" id="cardInfoHint"></p></div></dialog>
 
     <dialog class="modal" id="setupDialog">
       <form method="dialog" id="setupForm">
-        <p class="eyebrow">ESCAPE THE SEA OF STARS · 1.0.3</p>
+        <img class="setup-card-back" src="assets/card-back.webp" alt="逃离星海原作牌背"><p class="eyebrow">ESCAPE THE SEA OF STARS · 1.0.5-solo-friends</p>
         <h2>向宇宙之眼启航</h2>
         <p>一名玩家，一位领航员。经营资源，留下关键的反击，寻找逃离星海的路线。</p>
         <input type="hidden" id="playerCount" value="2"><input type="hidden" id="privacyMode" value="off">
@@ -64,26 +65,26 @@
           </ol>
           <div class="guide-grid">
             <details><summary>三种资源</summary><p>能源上限10；归零会跳过下一完整轮并在再下一轮恢复至至少5。动力无通用上限，用于交易和购买曲速。曲速用于跨阶及最终逃离。</p></details>
-            <details><summary>响应链</summary><p>瞬发牌按实际打出顺序入链，连续一圈无人继续响应后从最后一张逆序结算。绝对湮灭可取消链中未完成牌，也可弃置场上装备。</p></details>
+            <details><summary>响应链 · 电子裁定</summary><p>最新纸面写按出牌顺序依次结算；此电子版为保留反制窗口，采用以下明确裁定：瞬发牌按实际打出顺序入链，连续一圈无人继续响应后从最后一张逆序结算。绝对湮灭可取消链中未完成牌，也可弃置场上装备。</p></details>
             <details><summary>公平对战与胜负</summary><p>你始终能查看自己的手牌，不能操作AI手牌。AI只使用自己的手牌、公开装备和局面。有人逃离后完成当前轮，同轮逃离算平局，否则先逃离者获胜。</p></details>
             <details><summary>保存与认输</summary><p>每次操作都会自动存档，在菜单中也可手动保存或导出。在公开掷骰、选点、自己的响应机会或个人回合，可以从菜单认输并结束本局。</p></details>
           </div>
         </section>
         <div class="rules-columns">
           <section>
-            <h3>已按现行规则接入</h3>
+            <h3>当前电子规则</h3>
             <ul class="rule-list">
               <li>轮换先手投掷两枚公开D6；全员公开任选其一。</li>
               <li>同步确定路径；从掷骰玩家开始结算落点；统一摸牌后进入个人回合。</li>
-              <li>三层宇宙全部格子、分岔、虫洞、奇异隧道、跨阶与宇宙之眼。</li>
+              <li>三层宇宙全部格子、普通航线、虫洞、奇异隧道、跨阶与宇宙之眼。</li>
               <li>128张常规牌与16张机遇牌；三类装备槽与换装弃旧。</li>
-              <li>掠夺、强制交易、装备加减与累乘、后进先出的瞬发响应链。</li>
+              <li>掠夺、强制交易、装备加减与累乘、明确标注电子裁定的瞬发响应链。</li>
               <li>能源耗尽、停滞、跳轮恢复、手牌上限、逃离移除与同轮并列。</li>
               <li>固定一名玩家对战AI，自动存档，以及安全检查点认输。</li>
               <li>两种雷达的私密选牌与牌堆顶排序；多张立即牌由获得者本人决定结算顺序。</li>
               <li>【戴森球】与【空间探针】的每一次经过型收益都拥有独立响应窗口，装备被湮灭后会取消本次触发。</li>
               <li>机遇牌【自选跃迁】完整结算目标格：传至跃迁点可购买曲速，传至未知星域可摸1机遇＋1常规，传至宇宙之眼可检查逃离。</li>
-              <li>常规牌【定向跃迁】是向前移动1—6格的另一张牌；本版本中，不结算终点格，也不摸牌（由此跨阶的目的驿站同样不结算）。</li>
+              <li>常规牌【定向跃迁】是向前移动1—6格的另一张牌；会结算终点格，不摸基础常规牌；终点印刷的额外摸牌仍结算。</li>
             </ul>
           </section>
           <section>
@@ -103,11 +104,12 @@
     <div id="hoverDetail" class="hover-detail" role="tooltip" hidden></div>
     <div class="feedback-layer" id="feedbackLayer" aria-hidden="true"></div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="game-data.js"></script>
-    <script src="game-core.js"></script>
-    <script src="game-ai.js"></script>
+    <script src="card-art.js?v=1.0.5-solo-friends"></script><script src="game-data.js?v=1.0.5-solo-friends"></script>
+    <script src="game-core.js?v=1.0.5-solo-friends"></script>
+    <script src="game-ai.js?v=1.0.5-solo-friends"></script>
     <script src="duel-session.js"></script>
-    <script src="map-art.js?v=1.0.3"></script>
-    <script src="app.js?v=1.0.3"></script>
+    <script src="map-art.js?v=1.0.5-solo-friends"></script>
+    <script src="encounter-view.js?v=1.0.5-solo-friends"></script><script src="save-validation.js?v=1.0.5-solo-friends"></script><script src="card-availability.js?v=1.0.5-solo-friends"></script><script src="app.js?v=1.0.5-solo-friends"></script>
+  <script src="flight-guide.js?v=1.0.5-solo-friends"></script>
   </body>
 </html>

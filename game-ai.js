@@ -10,8 +10,8 @@
   const has = (p, id) => equipment(p).includes(id);
   const me = o => o.players.find(p => p.id === o.aiId);
   const player = (o, id) => o.players.find(p => p.id === id);
-  const routes = p => p.stage === 3 ? ["short", "long"] : [p.routePreference];
-  const publicParams = source => pick(source, ["targetId", "nodeId", "slot", "steps", "navBonus", "routePreference"]);
+  const routes = () => ["normal"];
+  const publicParams = source => pick(source, ["targetId", "nodeId", "slot", "steps", "navBonus", "routePreference", "equipmentCardId"]);
   function publicRoot(source) {
     if (!source) return null;
     return { ...pick(source, ["kind", "actorId", "playerId", "cardId", "action", "stage", "nodeId", "trigger", "triggerKind", "equipmentCardId", "transformed", "cancelled"]), params: publicParams(source.params), context: pick(source.context, ["bright", "dark", "double", "reversed", "broken", "protected"]) };
@@ -47,6 +47,7 @@
     const d = state.decision;
     if (d && d.playerId === aiId) {
       decision = { ...pick(d, ["kind", "playerId", "controllerId", "nodeId", "nodeIds", "slots", "cards", "reward", "steps", "allowedNav", "routes", "drawKind", "count", "stage", "picked", "returnOrder", "ordered"]), action: publicRoot(d.action) };
+      if (d.targets) decision.targets = d.targets.map(x => pick(x, ["key", "playerId", "slot", "cardId"]));
       if (d.entries) decision.entries = d.entries.map(x => pick(x, ["key", "cardId"]));
       if (d.items) decision.items = d.items.map(x => pick(x, ["token", "cardId"]));
     }
@@ -159,16 +160,16 @@
     }
     return false;
   }
-  function landingEstimate(o, p, n, context = {}, depth = 0) {
+  function landingEstimate(o, p, n, context = {}, depth = 0, suppressBaseDraw = false) {
     if (!n || depth > 2) return 0;
-    if (context.bright && context.dark) return n.noRegularDraw ? 0 : 3;
+    if (context.bright && context.dark) return n.noRegularDraw || suppressBaseDraw ? 0 : 3;
     let positive = 2 ** (context.bright || 0);
     if (has(p, "delisted")) positive *= 2;
     if (has(p, "reclusive")) positive *= 2;
     const convert = v => v > 0 ? (context.dark ? 0 : v * positive) : (context.bright ? 0 : v * 2 ** (context.dark || 0));
     resource(o, p, convert(n.energy || 0), convert(n.power || 0));
     if (n.stagnation && !context.bright) for (let i = 0; i < n.stagnation * 2 ** (context.dark || 0); i++) p.skipSchedule.push({ round: o.round + 1 + i, source: "预估停滞" });
-    let extra = n.noRegularDraw ? 0 : 3.8;
+    let extra = n.noRegularDraw || suppressBaseDraw ? 0 : 3.8;
     extra += (n.extraRegular || 0) * 4 + (n.extraOpportunity || 0) * 5 + (n.kind === "unknown" ? 5 : 0);
     if (n.fortress) { resource(o, p, 0, convert(10)); p.fortressProtected = true; }
     if (n.chaos) { resource(o, p, (convert(2) + convert(-2)) / 2, (convert(15) + convert(-15)) / 2); extra -= 3; }
@@ -189,7 +190,7 @@
     }
     return extra;
   }
-  function movementEstimate(o, p, steps, route, trigger = true) {
+  function movementEstimate(o, p, steps, route, trigger = true, suppressBaseDraw = false) {
     p.routePreference = route;
     const path = E.__debug.buildMovementPath(p, steps);
     if (!path.length) return 0;
@@ -203,11 +204,11 @@
       }
       if (i < path.length - 1 && ((has(p, "dyson_sphere") && n.starRegion) || (has(p, "space_probe") && n.kind === "eye"))) {
         const factor = (has(p, "delisted") ? 2 : 1) * (has(p, "reclusive") ? 2 : 1);
-        resource(o, p, Math.max(0, n.energy || 0) * factor, Math.max(0, n.power || 0) * factor); extra += 8;
+        resource(o, p, Math.max(0, n.energy || 0) * factor, Math.max(0, n.power || 0) * factor);
       }
     }
     p.position = path.at(-1);
-    if (trigger) extra += landingEstimate(o, p, node(p.stage, p.position));
+    if (trigger) extra += landingEstimate(o, p, node(p.stage, p.position), {}, 0, suppressBaseDraw);
     return extra;
   }
   function futureValue(o, p) {
@@ -219,7 +220,7 @@
     for (const dice of pairs) {
       let best = -Infinity;
       const bases = [...new Set(dice.concat(has(p, "time_stack") ? [dice[0] + dice[1]] : []))];
-      for (const base of bases) for (const bonus of has(p, "supernav") ? [0, 1, 2] : [0]) for (const route of routes(p)) {
+      for (const base of bases) for (const bonus of has(p, "supernav") ? [0, 1] : [0]) for (const route of routes(p)) {
         const next = copy(p), bonusValue = movementEstimate(o, next, base + bonus, route);
         best = Math.max(best, playerValue(o, next) - before + bonusValue);
       }
@@ -227,9 +228,9 @@
     }
     return total / pairs.length * .30;
   }
-  function movementScore(o, targetId, steps, route, trigger = true) {
+  function movementScore(o, targetId, steps, route, trigger = true, suppressBaseDraw = false) {
     const simulation = copy(o), p = player(simulation, targetId), before = utility(simulation);
-    const extra = movementEstimate(simulation, p, steps, route, trigger);
+    const extra = movementEstimate(simulation, p, steps, route, trigger, suppressBaseDraw);
     const sign = targetId === o.aiId ? 1 : -.82;
     return utility(simulation) - before + sign * (extra + futureValue(simulation, p) - futureValue(o, player(o, targetId)));
   }
@@ -254,14 +255,16 @@
       if (p.equipment.mobility === action.equipmentCardId) {
         const n = node(action.stage, action.nodeId), factor = (has(p, "reclusive") ? 2 : 1) * (has(p, "delisted") ? 2 : 1);
         resource(sim, p, Math.max(0, n.energy || 0) * factor, Math.max(0, n.power || 0) * factor);
-        extra += (p.id === o.aiId ? 1 : -.82) * 8;
       }
+    } else if (c?.action === "unequip_any") {
+      const target = player(sim, params.targetId);
+      if (target && target.equipment[params.slot] === params.equipmentCardId) target.equipment[params.slot] = null;
     } else if (c?.action === "moveSelf") {
-      return movementScore(o, p.id, params.steps + (params.navBonus || 0), params.routePreference || p.routePreference, false);
+      return movementScore(o, p.id, params.steps + (params.navBonus || 0), params.routePreference || p.routePreference, true, true);
     } else if (c?.action === "moveOther") {
       const target = player(o, params.targetId);
-      // The moved player chooses navigation and branch, so do not assume cooperation.
-      const scores = routes(target).flatMap(route => (has(target, "supernav") ? [0, 1, 2] : [0]).map(nav => movementScore(o, target.id, params.steps + nav, route)));
+      // The moved player chooses whether to use navigation; do not assume cooperation.
+      const scores = routes(target).flatMap(route => (has(target, "supernav") ? [0, 1] : [0]).map(nav => movementScore(o, target.id, params.steps + nav, route, true, true)));
       return target.id === o.aiId ? Math.max(...scores) : Math.min(...scores);
     } else if (c?.action === "teleport") {
       const scores = E.universe(p.stage).nodes.map(n => {
@@ -305,7 +308,7 @@
     function add(type, fields, score, reason) {
       result.push({ id: `a${result.length}`, type, actorId: o.aiId, ...fields, score: Math.round((Number.isFinite(score) ? score : -9999) * 100) / 100, reason });
     }
-    const moveReason = (steps, route) => `移动${steps}格；比较落点资源、能源耗尽、装备经过收益，以及距跃迁点/宇宙之眼的距离，预看下一轮6组骰面${p.stage === 3 ? `；${route === "long" ? "长" : "短"}支路` : ""}`;
+    const moveReason = (steps) => `移动${steps}格；沿地图普通箭头比较落点资源、能源耗尽、装备经过收益，以及距跃迁点/宇宙之眼的距离，预看下一轮6组骰面`;
     if (o.phase === "roll") add("roll", {}, 0, "公开掷出本轮公共骰");
     if (o.phase === "choose" && !o.ownChoice) {
       for (const choice of E.allowedChoices(state, p.id)) for (const route of routes(p)) add("choose", { choiceKey: choice.key, route, steps: choice.value }, movementScore(o, p.id, choice.value, route), moveReason(choice.value, route));
@@ -352,7 +355,7 @@
           else if (c.requiresTarget) paramsList = E.validTargets(state, id, p.id).map(targetId => ({ targetId }));
           if (c.action === "moveSelf" || c.action === "moveOther") {
             paramsList = paramsList.flatMap(params => Array.from({ length: c.maxSteps - c.minSteps + 1 }, (_, i) => ({ ...params, steps: c.minSteps + i })));
-            if (c.action === "moveSelf") paramsList = paramsList.flatMap(params => routes(p).flatMap(routePreference => (has(p, "supernav") ? [0, 1, 2] : [0]).map(navBonus => ({ ...params, routePreference, navBonus }))));
+            if (c.action === "moveSelf") paramsList = paramsList.flatMap(params => routes(p).flatMap(routePreference => (has(p, "supernav") ? [0, 1] : [0]).map(navBonus => ({ ...params, routePreference, navBonus }))));
           }
           for (const params of paramsList) {
             if (!E.canPlayCard(state, id, params)) continue;
@@ -377,8 +380,13 @@
         }
       } else if (d.kind === "teleport") {
         for (const id of d.nodeIds) { const s = copy(o), q = me(s); q.position = id; const extra = landingEstimate(s, q, node(q.stage, id)); add("decision", { value: id }, utility(s) - utility(o) + extra + futureValue(s, q), `传送到【${node(p.stage, id).name}】，比较资源、跨阶与逃离机会`); }
+      } else if (d.kind === "immediate_unequip") {
+        for (const target of d.targets) {
+          const owner = player(o, target.playerId);
+          add("decision", { value: target.key }, equipValue(o, owner, target.cardId) * (owner.id === o.aiId ? -1 : .82), `立即卸甲：比较卸下${owner.name}的【${card(target.cardId).name}】后收益，再公开目标让双方响应`);
+        }
       } else if (d.kind === "controlled_movement") {
-        for (const nav of d.allowedNav) for (const route of d.routes) add("decision", { value: `${nav}|${route}` }, movementScore(o, p.id, d.steps + nav, route), moveReason(d.steps + nav, route));
+        for (const nav of d.allowedNav) for (const route of d.routes) add("decision", { value: `${nav}|${route}` }, movementScore(o, p.id, d.steps + nav, route, true, true), moveReason(d.steps + nav, route));
       } else if (d.kind === "discard_equipment_required") {
         for (const slot of d.slots) add("decision", { value: slot }, -equipValue(o, p, p.equipment[slot]), `舍弃当前价值较低的【${card(p.equipment[slot]).name}】`);
       } else if (d.kind === "discard_hand_reward" || d.kind === "discard_equipment_reward") {
@@ -416,7 +424,7 @@
       default: throw new Error(`未知 AI 行动：${action.type}`);
     }
   }
-  const AI = { version: "1.0.0", buildObservation, rankActions, chooseAction, applyAction, getActor };
+  const AI = { version: "1.0.4", buildObservation, rankActions, chooseAction, applyAction, getActor };
   root.EscapeStarSeaAI = AI;
   if (typeof module !== "undefined" && module.exports) module.exports = AI;
 })(typeof globalThis !== "undefined" ? globalThis : this);

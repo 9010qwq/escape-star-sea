@@ -1,8 +1,9 @@
 (function bootstrapEscapeStarSea() {
   const Data = window.EscapeStarSeaData;
   const Engine = window.EscapeStarSeaEngine;
-  const STORAGE_KEY = "escape-star-sea-duel-v0.5";
-  const AUTO_STORAGE_KEY = "escape-star-sea-duel-v0.5-autosave";
+  const CardAvailability = window.StarSeaCardAvailability;
+  const STORAGE_KEY = "escape-star-sea-solo-friends-1.0.5";
+  const AUTO_STORAGE_KEY = "escape-star-sea-solo-friends-1.0.5-autosave";
   let state = null;
   let mapViewStage = 1;
   let selectedHand = null;
@@ -64,7 +65,7 @@
   }
   
   function equipmentSummary(c) {
-    const summaries={dyson_sphere:'经过恒星有收益',space_probe:'经过眼区有收益',supernav:'前进可加1或2格',double_trade:'交易收益翻倍',self_loop:'可与自己交易',dispersed_array:'免短距与爆破',delisted:'停交易，地图增益',hermit:'停掠夺，地图增益'};
+    const summaries={dyson_sphere:'经过恒星有收益',space_probe:'经过眼区有收益',supernav:'前进可加1格',double_trade:'交易收益翻倍',self_loop:'可与自己交易',dispersed_array:'免短距与爆破',delisted:'停交易，地图增益',hermit:'停掠夺，地图增益'};
     return summaries[c.id]||c.description;
   }
   
@@ -74,10 +75,10 @@
     if(n.energy)parts.push('能'+sign(n.energy));if(n.power)parts.push('动'+sign(n.power));
     if(n.kind==='unknown')return '机遇1 · 常规1';
     if(n.kind==='warp')return '购买曲速 · 可多点';
-    if(n.kind==='eye')return '能+2 动+20 · 逃离';
+    if(n.kind==='eye')return parts.join(' · ')+' · 逃离';
     if(n.fortress)return '5–6动+30；停留保护';
     if(n.chaos)return '另掷骰 · 资源变化';
-    if(n.discardEquipmentReward)return '弃装备：能+6 动+40';
+    if(n.discardEquipmentReward)return '弃装备：能+'+n.discardEquipmentReward.energy+' 动+'+n.discardEquipmentReward.power;
     if(n.discardHandReward)return '弃手牌：能+2 动+10';
     if(n.kind==='tunnel')return '奇：能+1传送；偶：能−2动+30';
     if(n.kind==='wormhole')return n.oneWayEye?'经眼区 → 左上':n.pair?'停留 → 对侧虫洞':'单向虫洞出口';
@@ -92,6 +93,7 @@
   }
   
   function cardEmblem(c) {
+    if(window.StarSeaCardArt?.[c.id])return '<img src="'+window.StarSeaCardArt[c.id]+'" alt="" loading="lazy" decoding="async" width="672" height="1026">';
     const strokes={annihilate:'<circle cx="24" cy="24" r="14"/><path d="M8 40L40 8M19 9L25 17L20 24L27 30L24 40"/>',equip:'<path d="M24 5L40 14V33L24 43L8 33V14Z"/><path d="M24 13V35M14 19L34 29M34 19L14 29"/>',plunder:'<path d="M7 32L35 8L29 28L15 42L19 29Z"/><path d="M31 33L41 40M36 27L45 28"/>',trade:'<path d="M7 17H38L31 10M41 31H10L17 38"/><circle cx="24" cy="24" r="4"/>',moveSelf:'<path d="M7 34L20 11L25 24L40 18L27 41L23 28Z"/>',moveOther:'<path d="M7 34L20 11L25 24L40 18L27 41L23 28Z"/>',map_bright:'<circle cx="24" cy="24" r="10"/><path d="M24 2V9M24 39V46M2 24H9M39 24H46M8 8L13 13M35 35L40 40M8 40L13 35M35 13L40 8"/>',map_dark:'<path d="M34 7A18 18 0 1 0 41 33A18 18 0 0 1 34 7Z"/>'};
     return '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">'+(strokes[c.action]||'<circle cx="24" cy="24" r="14"/><ellipse cx="24" cy="24" rx="22" ry="7" transform="rotate(-35 24 24)"/><path d="M24 15V33M15 24H33"/>')+'</svg>';
   }
@@ -126,7 +128,7 @@
     const slots={mobility:'机动',trade:'交易',plunder:'掠夺'};
     const id=p.equipment[selectedSlot],c=id&&Engine.cardById(id),box=$('#equipmentPopover');
     const candidates=canUse?p.hand.map((id,index)=>({card:Engine.cardById(id),index})).filter(x=>x.card.type==='equipment'&&x.card.slot===selectedSlot):[];
-    box.innerHTML=`<div class="equipment-popover-heading"><div><small>${escapeHtml(p.name)} · ${slots[selectedSlot]}槽</small><h3 id="equipmentPopoverTitle">${c?escapeHtml(c.name):'未装备'}</h3></div><button class="ghost-button" type="button" data-close-equipment aria-label="关闭装备操作">×</button></div><p>${c?escapeHtml(c.description):'此槽可保留一件'+slots[selectedSlot]+'装备。'}</p>${id&&canUse?'<button class="secondary-button full" type="button" data-unequip-slot="'+selectedSlot+'">卸下这件装备</button>':''}${candidates.length?'<div class="equipment-candidates"><small>'+ (c?'从手牌选择替换装备':'从手牌选择装备') +'</small>'+candidates.map(x=>'<button class="ghost-button full" type="button" data-equip-hand="'+x.index+'">'+escapeHtml(x.card.name)+' →</button>').join('')+'</div>':!canUse?'<small>装备持续效果自动生效。自己的个人回合可换装或卸装。</small>':'<small>装备后持续效果自动生效。</small>'}`;
+    box.innerHTML=`<div class="equipment-popover-heading"><div><small>${escapeHtml(p.name)} · ${slots[selectedSlot]}槽</small><h3 id="equipmentPopoverTitle">${c?escapeHtml(c.name):'未装备'}</h3></div><button class="ghost-button" type="button" data-close-equipment aria-label="关闭装备操作">×</button></div>${c?'<div class="equipment-illustration original-card-art">'+cardEmblem(c)+'</div>':''}<p>${c?escapeHtml(c.description):'此槽可保留一件'+slots[selectedSlot]+'装备。'}</p>${id&&canUse?'<button class="secondary-button full" type="button" data-unequip-slot="'+selectedSlot+'">卸下这件装备</button>':''}${candidates.length?'<div class="equipment-candidates"><small>'+ (c?'从手牌选择替换装备':'从手牌选择装备') +'</small>'+candidates.map(x=>'<button class="ghost-button full" type="button" data-equip-hand="'+x.index+'">'+escapeHtml(x.card.name)+' →</button>').join('')+'</div>':!canUse?'<small>装备持续效果自动生效。自己的个人回合可换装或卸装。</small>':'<small>装备后持续效果自动生效。</small>'}`;
     equipmentAnchor=anchor;anchor.setAttribute('aria-expanded','true');box.hidden=false;
     positionEquipmentPopover();
     box.querySelector('[data-close-equipment]').addEventListener('click',()=>closeEquipmentPopover(true));
@@ -299,7 +301,7 @@
 
   const phaseCopy = {
     roll: ["01", "公开掷骰", "由本轮掷骰玩家投掷两枚公开六面骰。"],
-    choose: ["02", "双方选点", "点击骰面即锁定本轮选择，双方可选相同点数；第三宇宙分岔请先选好。"],
+    choose: ["02", "双方选点", "点击骰面即锁定本轮选择，双方可选相同点数。先看落点和沿途跃迁机会，再决定。"],
     warp: ["03", "跃迁购买", "路径已同步锁定，依次处理经过跃迁点的购买与跨阶选择。"],
     response: ["04", "瞬发响应", "双方依次获得响应机会；连续一圈无人响应后，从最后一张开始逆序结算。"],
     decision: ["05", "效果选择", "当前规则效果需要指定目标、弃牌或选择移动方式。"],
@@ -376,43 +378,33 @@
   }
 
   function normalizeRestoredState(restored) {
-    if (!restored || restored.version !== Data.version) throw new Error("存档版本不兼容");
-    if (!restored.duel || restored.players?.length !== 2 || restored.players[0].id !== HUMAN_ID || restored.players[1].id !== AI_ID) throw new Error('请导入本版本的一对一存档');
-    restored.privacyMode = false;
-    restored.aiMode = 'local';
-    restored.drawChoiceQueue = restored.drawChoiceQueue || [];
-    restored.drawChoiceContinuation = restored.drawChoiceContinuation || null;
-    restored.passingQueue = restored.passingQueue || [];
-    restored.passingContinuation = restored.passingContinuation || null;
-    restored.nextImmediateId = Number(restored.nextImmediateId || 1);
-    restored.immediateQueue = (restored.immediateQueue || []).map((item, index) => ({
-      ...item,
-      token: item.token || `restored_immediate_${index + 1}`,
-      orderLocked: Boolean(item.orderLocked),
-    }));
-    restored.players.forEach((player) => {
-      player.skipSchedule = player.skipSchedule || [];
-      player.recoverySchedule = player.recoverySchedule || [];
-      player.withdrawn = Boolean(player.withdrawn);
-      if (typeof player.fortressProtected !== "boolean") {
-        player.fortressProtected = Boolean(!player.escaped && Engine.nodeById(player.stage, player.position)?.fortress);
-      }
-    });
-    return restored;
+    if (!restored || restored.version !== Data.version) throw new Error("本版已同步最新桌游规则，请使用 1.0.4／1.0.5 同规则存档。旧版存档请回原版继续。");
+    if (!window.StarSeaSaveValidation) throw new Error('存档校验组件未加载，请刷新后重试。当前对局未更改。');
+    return window.StarSeaSaveValidation.validateAndNormalize(restored);
+  }
+
+  function adoptRestoredState(restored) {
+    const previous={state,voyageStarted,selectedHand,privacyUnlockedKey,mapViewStage};
+    cancelAi();
+    try {
+      state=restored;voyageStarted=true;selectedHand=null;privacyUnlockedKey=null;
+      followActiveStage();
+      render();
+    } catch(error) {
+      cancelAi();state=previous.state;voyageStarted=previous.voyageStarted;
+      selectedHand=previous.selectedHand;privacyUnlockedKey=previous.privacyUnlockedKey;mapViewStage=previous.mapViewStage;
+      render();
+      throw new Error('存档无法恢复，已保留原对局。'+error.message);
+    }
+    cardDrafts.clear();
+    persistAutosave();
   }
 
   function restoreFromStorage(key, label) {
     const saved = localStorage.getItem(key);
     if (!saved) throw new Error(`当前浏览器没有${label}`);
     const restored = normalizeRestoredState(JSON.parse(saved));
-    cancelAi();
-    state = restored; cardDrafts.clear();
-    voyageStarted = true;
-    selectedHand = null;
-    privacyUnlockedKey = null;
-    followActiveStage();
-    persistAutosave();
-    render();
+    adoptRestoredState(restored);
   }
 
   function updateRestoreButton() {
@@ -524,7 +516,8 @@
     const viewport=$('.map-viewport');
     if(!viewport.clientWidth)return;
     const ratio=({1:660,2:570,3:700}[mapViewStage])/911;
-    const overviewHeight=document.body.classList.contains('map-focused')?viewport.clientHeight:compactScreen.matches?550:Math.max(480,Math.min(780,innerHeight*.6));
+    const fitViewport=document.body.classList.contains('map-focused')||(phoneLandscape.matches&&innerHeight<=600);
+    const overviewHeight=fitViewport?viewport.clientHeight:compactScreen.matches?550:Math.max(480,Math.min(780,innerHeight*.6));
     const size=mapZoom?Math.max(820,viewport.clientWidth):Math.min(viewport.clientWidth,overviewHeight/ratio);
     viewport.classList.toggle('is-overview',!mapZoom);
     els.mapStage.classList.toggle('overview',!mapZoom);
@@ -558,7 +551,7 @@
       node.next.forEach((targetId) => {
         const a = positions[node.id];
         const b = positions[targetId];
-        const points=node.oneWayEye ? `${a.x},${a.y} 97,${a.y} 97,3 3,3 3,${b.y} ${b.x},${b.y}` : `${a.x},${a.y} ${(a.x+b.x)/2},${(a.y+b.y)/2} ${b.x},${b.y}`;
+        const points=`${a.x},${a.y} ${(a.x+b.x)/2},${(a.y+b.y)/2} ${b.x},${b.y}`;
         lines.push(`<polyline class="orbit-line" data-edge-from="${node.id}" data-edge-to="${targetId}" points="${points}" fill="none" marker-mid="url(#arrow)" />`);
       });
     });
@@ -696,9 +689,7 @@
       const options = Engine.allowedChoices(state, player.id);
       const selected = state.choices[player.id];
       const preview = selected ? Engine.previewMovement(state, player.id) : null;
-      const routeControls = player.stage === 3 ? `<div class="route-row"><span>左下分岔：</span>
-        <button class="choice-button ${player.routePreference === "short" ? "selected" : ""}" data-route="short" data-player="${player.id}" type="button" ${selected ? "disabled" : ""}>短支路</button>
-        <button class="choice-button ${player.routePreference === "long" ? "selected" : ""}" data-route="long" data-player="${player.id}" type="button" ${selected ? "disabled" : ""}>长支路</button></div>` : "";
+      const routeControls = "";
       return `<div class="choice-player">
         <div class="choice-player-head"><strong style="color:${player.color}">${escapeHtml(player.name)}</strong><span>${selected ? `已锁定 ${selected.value}格` : "等待选择"}</span></div>
         <div class="choice-buttons">${options.map((option) => `<button class="choice-button ${selected && selected.key === option.key ? "selected" : ""}" data-choice="${option.key}" data-player="${player.id}" type="button" ${selected ? "disabled" : ""}>${escapeHtml(option.label)}<small>${escapeHtml(Engine.previewMovement(state, player.id, option.key).finalName)}</small></button>`).join("")}</div>
@@ -730,21 +721,28 @@
 
   function renderResponseControls() {
     const responder=Engine.currentResponder(state), available=Engine.availableResponses(state), stack=Engine.responseStackSnapshot(state);
+    const encounter=window.StarSeaEncounter?.publicEncounter(state);
+    const encounterMarkup=encounter?'<section class="encounter-card" aria-label="当前交锋"><span>当前交锋</span><h3>'+escapeHtml(encounter.title)+'</h3><p>'+escapeHtml(encounter.effect)+'</p>'+(encounter.context?'<p>'+escapeHtml(encounter.context)+'</p>':'')+'<small>'+escapeHtml(encounter.uncertainty||'瞬发响应可能改变最终结果。')+'</small></section>':'';
     const orderNames=state.response.order.map((id,index)=>(index===state.response.cursor?'▶':'')+playerById(id).name).join(' → ');
-    els.phaseControls.innerHTML='<div class="action-box"><p><strong>'+escapeHtml(responder.name)+'</strong>，要响应这次行动吗？</p><details class="response-timing"><summary>查看响应顺序与结算时机</summary><p>连续一圈无人加牌后，从最后一张开始结算。</p><div class="response-progress"><span>'+escapeHtml(orderNames)+'</span><strong>暂不响应 '+state.response.passes+'/'+state.response.order.length+'</strong></div></details><div class="response-stack">'+stack.map((item,index)=>'<div class="stack-item '+(item.cancelled?'cancelled':'')+'"><span><strong>'+(index===0?'原事件':'第'+index+'层')+'</strong> · '+escapeHtml(item.name)+'</span><span>'+escapeHtml(playerById(item.playerId).name)+'</span></div>').join('')+'</div><p class="response-hand-hint">'+(available.length?'可响应的瞬发牌已在下方手牌中点亮，点牌即可选择目标并确认。':'手中没有适用于当前窗口的瞬发牌。')+'</p>'+(available.length?'<button class="ghost-button full" id="showResponseHand" type="button">查看可响应手牌 ↓</button>':'')+'<button class="secondary-button full" id="passResponse" type="button">暂不响应，继续结算</button></div>';
+    const nextEffect=[...stack].reverse().find(item=>!item.cancelled);
+    els.phaseControls.innerHTML=encounterMarkup+'<div class="action-box"><p><strong>'+escapeHtml(responder.name)+'</strong>，要响应这次行动吗？</p><details class="response-timing"><summary>查看响应顺序与结算时机</summary><p>连续一圈无人加牌后，从最后一张开始结算。</p><div class="response-progress"><span>'+escapeHtml(orderNames)+'</span><strong>暂不响应 '+state.response.passes+'/'+state.response.order.length+'</strong></div></details><div class="response-stack">'+stack.map((item,index)=>'<div class="stack-item '+(item.cancelled?'cancelled':'')+'"><span><strong>'+(index===0?'原事件':'第'+index+'层')+'</strong> · '+escapeHtml(item.name)+'</span><span>'+escapeHtml(playerById(item.playerId).name)+'</span></div>').join('')+'</div><p class="response-hand-hint">'+(available.length?'可响应的瞬发牌已在下方手牌中点亮，点牌即可选择目标并确认。':'手中没有适用于当前窗口的瞬发牌。')+'</p>'+(available.length?'<button class="ghost-button full" id="showResponseHand" type="button">查看可响应手牌 ↓</button>':'')+'<button class="secondary-button full" id="passResponse" type="button">暂不响应，继续结算</button></div>';
+    if(nextEffect){const next=document.createElement('p');next.className='next-resolution';next.textContent='若无人再加牌，将先结算：'+playerById(nextEffect.playerId).name+'的【'+nextEffect.name+'】。';els.phaseControls.querySelector('.response-stack').before(next);}
     $('#showResponseHand')?.addEventListener('click',()=>{setHandFolded(false);selectedHand=null;inspectHand(playerById(HUMAN_ID).hand.findIndex(id=>available.includes(id)));});
     $('#passResponse').addEventListener('click',()=>safeAction(()=>Engine.passResponse(state)));
   }
 
   function decisionOptions(decision) {
     const player = playerById(decision.playerId);
+    if (decision.kind === "immediate_unequip") {
+      return decision.targets.map(t=>({value:t.key,label:playerById(t.playerId).name+' · 弃置【'+Engine.cardById(t.cardId).name+'】'}));
+    }
     if (decision.kind === "teleport") {
       return decision.nodeIds.map((id) => ({ value: id, label: Engine.nodeById(player.stage, id).name }));
     }
     if (decision.kind === "controlled_movement") {
       return decision.allowedNav.flatMap((nav) => decision.routes.map((route) => ({
         value: `${nav}|${route}`,
-        label: `${nav ? `超算导航＋${nav}格` : "不使用超算加格"}${player.stage === 3 ? ` · ${route === "long" ? "宇宙之眼长支路" : "短支路"}` : ""}`,
+        label: `${nav ? `超算导航＋${nav}格` : "不使用超算加格"}`,
       })));
     }
     if (decision.kind === "discard_equipment_required" || decision.kind === "discard_equipment_reward") {
@@ -828,6 +826,7 @@
   }
 
   function cardActionMarkup(c,p,response) {
+    const status=CardAvailability.availability(state,c.id,HUMAN_ID);
     let allowed=false,hint='',params='',label='确认打出';
     const personal=state.phase==='personal'&&Engine.currentPersonalPlayer(state)?.id===HUMAN_ID&&!state.mustDiscard;
     if(response){
@@ -837,19 +836,17 @@
         hint='湮灭选中的未完成牌或场上装备；其余响应继续结算。';
       }
     }else if(personal){
-      allowed=c.type!=='instant'||c.action==='annihilate';
-      if(!allowed)hint='这张瞬发牌需留到对应响应窗口。';
-      if(c.requiresTarget&&!Engine.validTargets(state,c.id,HUMAN_ID).length){allowed=false;hint='当前没有合法目标。';}
-      if(c.action==='annihilate'&&!equipmentTargets(HUMAN_ID).length){allowed=false;hint='场上没有可湮灭的装备。';}
+      allowed=status.allowed;
+      if(!allowed)hint=status.reason;
       if(allowed)params=cardParameters(c,p,selectedHand);
       if(c.type==='equipment'){
         const current=p.equipment[c.slot],slot={mobility:'机动',trade:'交易',plunder:'掠夺'}[c.slot];
         label=current?'确认替换装备':'装备到'+slot+'槽';
         hint=current?'替换'+slot+'槽的【'+Engine.cardById(current).name+'】，原装备将进入弃牌堆。':'装备到空闲的'+slot+'槽，持续效果会自动生效。';
       }else if(c.action==='annihilate')label='湮灭指定装备';
-    }else hint=state.phase==='response'?'此牌不适用于当前响应窗口。':'等待你的个人回合；瞬发牌在适用的响应窗口使用。';
+    }else hint=status.reason;
     const title=response?'响应这次行动':c.type==='equipment'?'装备这张牌':'使用这张牌';
-    return '<div class="card-inline-actions" role="group" aria-label="'+escapeHtml(c.name)+'操作"><div class="card-action-heading"><strong>'+title+'</strong><button type="button" class="text-button" id="clearCardSelection">取消 ×</button></div>'+params+(hint?'<p class="card-hint">'+escapeHtml(hint)+'</p>':'')+'<button class="primary-button full" id="'+(response?'playResponseCard':'playSelectedCard')+'" type="button" '+(allowed?'':'disabled')+'>'+label+'</button></div>';
+    return '<div class="card-inline-actions" role="group" aria-label="'+escapeHtml(c.name)+'操作"><div class="card-action-heading"><strong>'+title+'</strong><button type="button" class="text-button" id="clearCardSelection">取消 ×</button></div>'+params+(hint?'<p class="card-hint">'+escapeHtml(hint)+'</p>':'')+'<p class="card-input-hint" role="status" hidden></p><button class="primary-button full" id="'+(response?'playResponseCard':'playSelectedCard')+'" type="button" '+(allowed?'':'disabled')+'>'+label+'</button></div>';
   }
 
   function bindCardActions() {
@@ -859,7 +856,14 @@
     area.querySelectorAll('select').forEach(select=>{if(select.options.length===2&&select.options[0].value==='')select.selectedIndex=1;});
     const button=area.querySelector('#playSelectedCard:not(:disabled),#playResponseCard:not(:disabled)');
     if(!button)return;
-    const validate=()=>{button.disabled=[...area.querySelectorAll('select')].some(input=>!input.value);};
+    const validate=()=>{
+      const missing=[...area.querySelectorAll('select')].filter(input=>!input.value);
+      button.disabled=missing.length>0;
+      const note=area.querySelector('.card-input-hint');
+      const labels=missing.map(input=>input.options[0]?.textContent||'请选择参数');
+      note.textContent=labels.length?labels.join('；')+'，再确认。':'';
+      note.hidden=!labels.length;
+    };
     area.querySelectorAll('select').forEach(select=>select.addEventListener('change',validate));validate();
     button.addEventListener('click',()=>safeAction(()=>{
       if(button.id==='playResponseCard'){Engine.playResponse(state,id,area.querySelector('[data-annihilate-target]')?.value||null);return;}
@@ -917,7 +921,7 @@
     els.playerList.innerHTML=state.players.map((p,index)=>{
       const n=Engine.nodeById(p.stage,p.position),needed=p.stage<3?Engine.requiredStageWarp(state,p.stage):Engine.requiredEscapeWarp(state);
       return `<article class="player-row ${p.id===HUMAN_ID?'human-row':'opponent-row'} ${focus?.id===p.id?'active':''} ${p.escaped?'escaped':''}" style="--player-color:${p.color}">
-        <div class="pilot-heading"><span class="pilot-emblem">${p.id===HUMAN_ID?'你':'AI'}</span><div><strong title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</strong><small>${p.withdrawn?'已认输':p.escaped?'已逃离':'宇宙'+p.stage+' · '+escapeHtml(n.short)}</small></div><div class="status-badges">${statusBadges(p,index)}</div></div>
+        <div class="pilot-heading"><span class="pilot-emblem"><img src="assets/pilot-${p.id===HUMAN_ID?'1':'4'}.webp" alt="" aria-hidden="true"><span>${p.id===HUMAN_ID?'你':'AI'}</span></span><div><strong title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</strong><small>${p.withdrawn?'已认输':p.escaped?'已逃离':'宇宙'+p.stage+' · '+escapeHtml(n.short)}</small></div><div class="status-badges">${statusBadges(p,index)}</div></div>
         <div class="hud-resources"><span title="能源为0会跳轮"><span class="resource-label" data-short="能">能源</span> <b>${p.energy}<small>/10</small></b></span><span title="用于交易和购买曲速"><span class="resource-label" data-short="动">动力</span> <b>${p.power}</b></span><span class="warp-resource" title="曲速没有库存上限。跨阶仅支付所需数量，余量保留。"><span class="resource-label" data-short="曲">曲速</span> <b>${p.warp}</b><small>${p.stage<3?'下阶':'逃离'}需${needed}</small></span><span><span class="resource-label" data-short="手">手牌</span> <b>${p.hand.length}</b></span></div>
         ${p.id===AI_ID?'<button class="opponent-equipment-button ghost-button" type="button" aria-label="查看对手状态与全部装备">详情</button>':''}<div class="equipment-rack">${Object.entries(slots).map(([slot,label])=>{const id=p.equipment[slot],c=id&&Engine.cardById(id);return `<button class="equipment-slot ${c?'occupied':'empty'}" data-equipment-player="${p.id}" data-equipment-slot="${slot}" type="button" aria-controls="equipmentPopover" aria-expanded="false" aria-label="${escapeHtml(p.name+'，'+label+'槽，'+(c?c.name+'，'+c.description:'未装备'))}" data-hover-title="${escapeHtml(label+'槽 · '+(c?c.name:'未装备'))}" data-hover-text="${escapeHtml(c?c.description:'可装备一件'+label+'装备。点击查看全部装备。')}"><span class="slot-label">${label}</span><strong class="slot-name">${c?escapeHtml(c.name):'未装备'}</strong><small class="slot-effect">${c?escapeHtml(equipmentSummary(c)):'等待装配'}</small></button>`;}).join('')}</div>
       </article>`;
@@ -972,10 +976,10 @@
       parts.push(`<select data-param-steps><option value="">请选择移动格数</option>${Array.from({ length: card.maxSteps - card.minSteps + 1 }, (_, offset) => `<option value="${card.minSteps + offset}">移动${card.minSteps + offset}格</option>`).join("")}</select>`);
     }
     if (card.action === "moveSelf") {
-      if (Object.values(actor.equipment).includes('supernav')) parts.push('<select data-param-nav><option value="0">超算导航不加格</option><option value="1">若目标有超算导航：+1格</option><option value="2">若目标有超算导航：+2格</option></select>');
-      if (actor.stage === 3) parts.push('<select data-param-route><option value="short">若经过第三宇宙左下分岔：短支路</option><option value="long">若经过第三宇宙左下分岔：宇宙之眼长支路</option></select>');
+      if (Object.values(actor.equipment).includes('supernav')) parts.push('<select data-param-nav><option value="0">超算导航不加格</option><option value="1">若目标有超算导航：+1格</option></select>');
+
     } else if (card.action === "moveOther") {
-      parts.push('<small>基础格数由出牌者指定；响应结束后，由被移动者本人选择是否发动超算导航及第三宇宙分岔。</small>');
+      parts.push('<small>基础格数由出牌者指定；响应结束后，由被移动者本人选择是否发动超算导航。</small>');
     }
     if (card.type === "instant" && card.action === "annihilate") {
       const targets = equipmentTargets(actor.id);
@@ -999,9 +1003,9 @@
     els.handCount.textContent=p.hand.length+'张';els.hand.className='hand'+(discarding?' discard-mode':'');
     if(selectedHand!==null&&!p.hand[selectedHand])selectedHand=null;
     els.hand.innerHTML=p.hand.map((id,index)=>{
-      const c=Engine.cardById(id),response=available.includes(id),canPlay=personal&&(discarding||c.type!=='instant'||c.action==='annihilate'),selected=selectedHand===index;
-      const hint=discarding?'点击弃置此牌':response?'当前可响应 · 点击在牌上操作':canPlay?(c.type==='equipment'?'点击在牌上装备':'点击在牌上使用'):c.type==='instant'?'保留至对应响应时机':'等待你的个人回合';
-      return '<article class="game-card '+c.type+(selected?' selected':'')+(canPlay||response?' playable':'')+'" data-card-id="'+id+'" data-card-index="'+index+'"><button type="button" class="card-face" aria-expanded="'+selected+'" aria-label="'+escapeHtml(c.name+'，'+c.description)+'"><span class="card-meta"><span>'+escapeHtml(c.face)+'</span><span>'+(c.type==='equipment'?'装备 · '+({mobility:'机动',trade:'交易',plunder:'掠夺'})[c.slot]:c.type==='instant'?'瞬发':'行动')+'</span></span><span class="card-emblem" aria-hidden="true">'+cardEmblem(c)+'</span><strong class="card-title">'+escapeHtml(c.name)+'</strong><span class="card-description">'+escapeHtml(c.description)+'</span><span class="card-use-hint">'+hint+'</span></button>'+(selected&&!discarding?cardActionMarkup(c,p,response):'')+'</article>';
+      const c=Engine.cardById(id),status=CardAvailability.availability(state,id,HUMAN_ID),response=!!status.response,canPlay=personal&&status.allowed,selected=selectedHand===index;
+      const hint=status.reason;
+      return '<article class="game-card '+c.type+(selected?' selected':'')+(canPlay||response?' playable':'')+'" data-card-id="'+id+'" data-card-index="'+index+'"><button type="button" class="card-face" aria-expanded="'+selected+'" aria-label="'+escapeHtml(c.name+'，'+c.description+'。'+hint)+'"><span class="card-meta"><span>'+escapeHtml(c.face)+'</span><span>'+(c.type==='equipment'?'装备 · '+({mobility:'机动',trade:'交易',plunder:'掠夺'})[c.slot]:c.type==='instant'?'瞬发':'行动')+'</span></span><span class="card-emblem original-card-art" aria-hidden="true">'+cardEmblem(c)+'</span><strong class="card-title">'+escapeHtml(c.name)+'</strong><span class="card-description">'+escapeHtml(c.description)+'</span><span class="card-use-hint">'+hint+'</span></button>'+(selected&&!discarding?cardActionMarkup(c,p,response):'')+'</article>';
     }).join('')||'<div class="empty-state">手牌暂空 · 探索星域，获取新的选择</div>';
     els.hand.querySelectorAll('.card-face').forEach(b=>b.addEventListener('click',()=>inspectHand(Number(b.closest('[data-card-index]').dataset.cardIndex))));
     els.turnActions.innerHTML=personal&&!discarding?'<button class="primary-button" id="endTurnButton" type="button">结束回合 →</button>':discarding?'<span class="discard-counter">还需弃'+Math.max(0,p.hand.length-3)+'张</span>':responding?'<button class="secondary-button" id="passResponseInHand" type="button">暂不响应 →</button>':'<span class="hand-note">完整牌面 · 横向滑动浏览</span>';
@@ -1187,16 +1191,10 @@
     const file = els.importInput.files && els.importInput.files[0];
     if (!file) return;
     try {
-      if (!window.confirm("导入会替换当前局面；如需保留，请先导出当前存档。是否继续？")) return;
+      if(file.size>2*1024*1024)throw new Error('存档文件过大，请选择游戏导出的 JSON 存档。当前对局未更改。');
       const restored = normalizeRestoredState(JSON.parse(await file.text()));
-      cancelAi();
-      state = restored; cardDrafts.clear();
-      voyageStarted = true;
-      selectedHand = null;
-      privacyUnlockedKey = null;
-      followActiveStage();
-      persistAutosave();
-      render();
+      if (!window.confirm("导入会替换当前局面；如需保留，请先导出当前存档。是否继续？")) return;
+      adoptRestoredState(restored);
       showToast(`已导入第${state.round}轮存档`);
     } catch (error) {
       console.error(error);

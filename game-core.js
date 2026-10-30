@@ -28,6 +28,17 @@
   const hasEquipment = (player, id) => Object.values(player.equipment).includes(id);
   const isFortressProtected = (player) => Boolean(player && !player.escaped && player.fortressProtected);
 
+  function immediateUnequipTargets(state, actorId) {
+    return state.players.filter(p => !p.escaped && (p.id === actorId || !isFortressProtected(p))).flatMap(p =>
+      Object.entries(p.equipment).filter(([, cardId]) => cardId).map(([slot, cardId]) => ({ key: `${p.id}|${slot}`, playerId: p.id, slot, cardId }))
+    );
+  }
+
+  function validateSaveVersion(state) {
+    if (!state || state.version !== DATA.version) throw new Error(`存档规则版本不兼容：需要 ${DATA.version}。旧版本存档请在原版本继续游玩。`);
+    return true;
+  }
+
   function nextRandom(state) {
     state.seed = (Math.imul(state.seed, 1664525) + 1013904223) >>> 0;
     return state.seed / 4294967296;
@@ -397,7 +408,7 @@
           color: COLORS[index], stage: 1, position: start,
           energy: 10, power: 0, warp: 0, hand: [],
           equipment: { plunder: null, trade: null, mobility: null },
-          routePreference: index % 2 ? "long" : "short",
+          routePreference: "normal",
           activeThisRound: true, skipSchedule: [], recoverySchedule: [],
           exhausted: false, escaped: false, withdrawn: false, escapedRound: null, fortressProtected: false,
         };
@@ -424,8 +435,8 @@
   function nextNodeId(player, currentId) {
     const node = nodeById(player.stage, currentId);
     if (!node || !node.next.length) throw new Error("地图路线不完整。");
-    if (node.next.length === 1) return node.next[0];
-    return player.routePreference === "long" ? node.next.find((id) => id === "s3_primordial") : node.next.find((id) => id === "s3_station_d");
+    if (node.next.length !== 1) throw new Error("当前纸面地图没有可选的普通分岔。");
+    return node.next[0];
   }
 
   function buildMovementPath(player, steps) {
@@ -451,7 +462,7 @@
     if (state.dice[1] !== state.dice[0]) bases.push({ key: "die_1", label: `骰B · ${state.dice[1]}`, value: state.dice[1] });
     if (hasEquipment(player, "time_stack")) bases.push({ key: "sum", label: `时序叠加 · ${state.dice[0] + state.dice[1]}`, value: state.dice[0] + state.dice[1] });
     if (!hasEquipment(player, "supernav")) return bases;
-    return bases.flatMap((choice) => [0, 1, 2].map((bonus) => ({
+    return bases.flatMap((choice) => [0, 1].map((bonus) => ({
       key: `${choice.key}_n${bonus}`, label: `${choice.label}${bonus ? ` +导航${bonus}` : ""}`,
       value: choice.value + bonus, baseKey: choice.key, navBonus: bonus,
     })));
@@ -459,9 +470,8 @@
 
   function setRoutePreference(state, playerId, route) {
     const player = playerById(state, playerId);
-    if (!["short", "long"].includes(route)) throw new Error("支路选择不合法。");
-    player.routePreference = route;
-    addLog(state, `${player.name} 将第三宇宙分岔预设为${route === "short" ? "短支路" : "宇宙之眼长支路"}。`);
+    if (route !== "normal") throw new Error("当前纸面地图沿单一普通路线行进，不选择短长支路。");
+    player.routePreference = "normal";
   }
 
   function rollDice(state) {
@@ -650,7 +660,7 @@
         player.fortressProtected = false;
         player.stage += 1;
         player.position = plan.stationId;
-        beginMapResolution(state, player, nodeById(player.stage, player.position), action.flowKind, false, "transition", action.completionCardId);
+        beginMapResolution(state, player, nodeById(player.stage, player.position), action.flowKind, action.suppressBaseDraw, "transition", action.completionCardId);
       } else afterMapEffect(state, action, sourceNode);
     } else if (completedContext === "shared") commitSharedMovement(state);
     else finalizeSingleMovement(state, plan);
@@ -886,6 +896,17 @@
         continue;
       }
       const card = cardById(item.cardId);
+      if (card.action === "unequip_any") {
+        const targets = immediateUnequipTargets(state, player.id);
+        if (!targets.length) {
+          addLog(state, `${player.name} 的【立即卸甲】没有合法装备目标，空结算后弃置。`);
+          discardCardId(state, item.cardId);
+          continue;
+        }
+        state.decision = { kind: "immediate_unequip", playerId: player.id, cardId: item.cardId, targets };
+        state.phase = PHASES.DECISION;
+        return;
+      }
       beginResponse(state, {
         kind: "immediate",
         actorId: player.id,
@@ -907,6 +928,19 @@
   function resolveImmediateAction(state, rootAction) {
     const player = playerById(state, rootAction.actorId);
     const card = cardById(rootAction.cardId);
+    if (card.action === "unequip_any") {
+      const { targetId, slot, equipmentCardId } = rootAction.params;
+      const target = state.players.find(p => p.id === targetId);
+      const stillLegal = immediateUnequipTargets(state, player.id).some(t => t.playerId === targetId && t.slot === slot && t.cardId === equipmentCardId);
+      if (target && stillLegal) {
+        target.equipment[slot] = null;
+        discardCardId(state, equipmentCardId);
+        addLog(state, `${player.name} 的【立即卸甲】弃置${target.name}的【${cardById(equipmentCardId).name}】。`, "negative");
+      } else addLog(state, "【立即卸甲】原目标已离场或不再合法，本次不弃置其他装备。");
+      discardCardId(state, rootAction.cardId);
+      processImmediateQueue(state);
+      return;
+    }
     if (card.action === "drawRegular") {
       drawRegular(state, player, card.amount);
       discardCardId(state, rootAction.cardId);
@@ -1214,8 +1248,7 @@
   }
 
   function continueSinglePlanAfterPassing(state, plan) {
-    const treatsFinalWarpAsPassing = plan.trigger === "directed_jump";
-    if (plan.warpIndex >= 0 && (plan.warpIndex < plan.path.length - 1 || treatsFinalWarpAsPassing)) {
+    if (plan.warpIndex >= 0 && plan.warpIndex < plan.path.length - 1) {
       state.warpQueue = [makeWarpOffer(state, plan)];
       state.warpIndex = 0;
       state.warpContext = "single";
@@ -1226,18 +1259,10 @@
   function finalizeSingleMovement(state, plan) {
     const player = playerById(state, plan.playerId);
     player.fortressProtected = false;
-    if (plan.trigger === "directed_jump") {
-      if (plan.transition) {
-        player.stage += 1;
-        player.position = plan.stationId;
-      } else player.position = plan.final;
-      addLog(state, `${player.name} 由【定向跃迁】抵达【${nodeById(player.stage, player.position).name}】，按牌面不结算终点格且不摸牌。`, "accent");
-      if (plan.sourceCardId) discardCardId(state, plan.sourceCardId);
-      resumePersonalPhase(state);
-    } else if (plan.transition) {
+    if (plan.transition) {
       player.stage += 1;
       player.position = plan.stationId;
-      beginMapResolution(state, player, nodeById(player.stage, player.position), plan.flowKind, false, "transition", plan.sourceCardId);
+      beginMapResolution(state, player, nodeById(player.stage, player.position), plan.flowKind, plan.suppressBaseDraw, "transition", plan.sourceCardId);
     } else {
       player.position = plan.final;
       beginMapResolution(state, player, nodeById(player.stage, player.position), plan.flowKind, plan.suppressBaseDraw, plan.trigger || "landing", plan.sourceCardId);
@@ -1269,10 +1294,8 @@
       if (hasEquipment(player, "reclusive")) factor *= 2;
       if (rootAction.triggerKind === "dyson") {
         applyResources(state, player, Math.max(0, node.energy || 0) * factor, Math.max(0, node.power || 0) * factor, `戴森球经过${node.name}`);
-        drawRegular(state, player, 2);
       } else {
-        applyResources(state, player, 2 * factor, 20 * factor, "空间探针经过宇宙之眼");
-        drawRegular(state, player, 2);
+        applyResources(state, player, Math.max(0, node.energy || 0) * factor, Math.max(0, node.power || 0) * factor, "空间探针经过宇宙之眼");
         addLog(state, `${player.name} 只是“经过”宇宙之眼，本次不检查逃离。`);
       }
       processDrawChoices(state, { kind: "after_passing_trigger" });
@@ -1321,8 +1344,7 @@
       processDrawChoices(state, { kind: "after_personal_opportunity" });
       return;
     } else if (rootAction.action === "moveSelf") {
-      if (["short", "long"].includes(rootAction.params.routePreference)) player.routePreference = rootAction.params.routePreference;
-      const nav = hasEquipment(player, "supernav") ? Math.max(0, Math.min(2, rootAction.params.navBonus || 0)) : 0;
+      const nav = hasEquipment(player, "supernav") ? Math.max(0, Math.min(1, rootAction.params.navBonus || 0)) : 0;
       beginSingleMovement(state, player, rootAction.params.steps + nav, true, "personal", "directed_jump", rootAction.cardId);
       return;
     } else if (rootAction.action === "moveOther") {
@@ -1333,14 +1355,18 @@
         resumePersonalPhase(state);
         return;
       }
+      if (!hasEquipment(target, "supernav")) {
+        beginSingleMovement(state, target, rootAction.params.steps, true, "personal", "landing", rootAction.cardId);
+        return;
+      }
       state.decision = {
         kind: "controlled_movement", playerId: target.id, controllerId: player.id,
-        steps: rootAction.params.steps, allowedNav: hasEquipment(target, "supernav") ? [0, 1, 2] : [0],
-        routes: target.stage === 3 ? ["short", "long"] : [target.routePreference],
+        steps: rootAction.params.steps, allowedNav: [0, 1],
+        routes: ["normal"],
         completionCardId: rootAction.cardId,
       };
       state.phase = PHASES.DECISION;
-      addLog(state, `${target.name} 决定本次受控移动的超算加格与第三宇宙分岔。`, "accent");
+      addLog(state, `${target.name} 决定本次受控移动是否使用超算导航增加1格。`, "accent");
       return;
     }
     if (shouldDiscard && !["plunder", "trade"].includes(rootAction.kind)) discardCardId(state, rootAction.cardId);
@@ -1513,8 +1539,9 @@
     }
     if (card.requiresTarget && !validTargets(state, cardId, actor.id).includes(params.targetId)) return false;
     if (card.requiresNode && !nodeLocation(params.nodeId)) return false;
-    if ((card.action === "moveSelf" || card.action === "moveOther") && (params.steps < card.minSteps || params.steps > card.maxSteps)) return false;
-    if (params.routePreference && !["short", "long"].includes(params.routePreference)) return false;
+    if ((card.action === "moveSelf" || card.action === "moveOther") && (!Number.isInteger(params.steps) || params.steps < card.minSteps || params.steps > card.maxSteps)) return false;
+    if (params.routePreference && params.routePreference !== "normal") return false;
+    if (params.navBonus !== undefined && (!Number.isInteger(params.navBonus) || ![0, 1].includes(params.navBonus) || (params.navBonus && (card.action !== "moveSelf" || !hasEquipment(actor, "supernav"))))) return false;
     return true;
   }
 
@@ -1733,6 +1760,16 @@
     state.decision = null;
     const player = playerById(state, decision.playerId);
 
+    if (decision.kind === "immediate_unequip") {
+      const selected = decision.targets.find(target => target.key === value);
+      const legal = immediateUnequipTargets(state, player.id).some(target => target.key === value && target.cardId === selected?.cardId);
+      if (!selected || !legal) { state.decision = decision; throw new Error("立即卸甲的装备目标不合法。"); }
+      const target = playerById(state, selected.playerId);
+      addLog(state, `${player.name} 声明【立即卸甲】，目标为${target.name}的【${cardById(selected.cardId).name}】。`, "accent");
+      beginResponse(state, { kind: "immediate", actorId: player.id, cardId: decision.cardId, action: "unequip_any", params: { targetId: selected.playerId, slot: selected.slot, equipmentCardId: selected.cardId }, context: {}, alreadyDiscarded: false });
+      return;
+    }
+
     if (decision.kind === "teleport") {
       if (!decision.nodeIds.includes(value)) throw new Error("传送目标不合法。");
       const destination = nodeById(player.stage, value);
@@ -1744,9 +1781,9 @@
     if (decision.kind === "controlled_movement") {
       const [navText, route] = String(value).split("|");
       const nav = Number(navText);
-      if (!decision.allowedNav.includes(nav)) throw new Error("超算导航选择不合法。");
-      if (!decision.routes.includes(route)) throw new Error("第三宇宙分岔选择不合法。");
-      player.routePreference = route;
+      if (!decision.allowedNav.includes(nav)) { state.decision = decision; throw new Error("超算导航选择不合法。"); }
+      if (!decision.routes.includes(route)) { state.decision = decision; throw new Error("普通行进路线不合法。"); }
+      player.routePreference = "normal";
       beginSingleMovement(state, player, decision.steps + nav, true, "personal", "landing", decision.completionCardId);
       return;
     }
@@ -1808,7 +1845,7 @@
     currentResponder, availableResponses, responseTargets, playResponse, passResponse, resolveDecision,
     responseStackSnapshot: (state) => state.response ? clone(state.response.stack) : [],
     cardById, nodeById, universe, requiredStageWarp, requiredEscapeWarp, warpCost, isFortressProtected,
-    getPublicSnapshot, clone,
+    getPublicSnapshot, clone, validateSaveVersion, immediateUnequipTargets,
     __debug: {
       applyResources, drawRegular, collectOpportunity, buildMovementPath, beginMapResolution,
       checkEscape, scheduleSkip, processImmediateQueue, processDrawChoices, beginImmediateOrdering,

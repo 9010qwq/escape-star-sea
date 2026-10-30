@@ -1,0 +1,70 @@
+:root {
+  --flight-guide-accent: #9bc4ff;
+  --flight-guide-ink: #e6edff;
+  --flight-guide-muted: #acb9d2;
+  --flight-guide-back: #111c34;
+}
+.flight-guide-intro {
+  margin: 14px 0 18px;
+  padding: 12px 14px;
+  background: rgba(108, 174, 179, .07);
+  border: 1px solid rgba(157, 215, 216, .19);
+  border-radius: 13px;
+  color: var(--flight-guide-ink);
+}
+.flight-guide-intro summary { cursor: pointer; color: var(--flight-guide-accent); font-size: 14px; font-weight: 700; }
+.flight-guide-intro ol { display: grid; gap: 9px; margin: 12px 0 0; padding-left: 22px; }
+.flight-guide-intro li { padding-left: 2px; font-size: 13px; line-height: 1.55; }
+.flight-guide-intro li strong { display: block; }
+.flight-guide-intro li span { color: var(--flight-guide-muted); }
+.flight-guide-open { margin-left: auto; min-height: 36px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+.flight-guide-tip {
+  margin: 10px 0 14px;
+  padding: 9px 11px 10px;
+  border-left: 2px solid var(--flight-guide-accent);
+  border-radius: 0 9px 9px 0;
+  background: rgba(108, 174, 179, .07);
+  color: var(--flight-guide-ink);
+}
+.flight-guide-tip[hidden], .flight-guide-hand[hidden] { display: none !important; }
+.flight-guide-tip-head { display: flex; align-items: center; gap: 8px; }
+.flight-guide-tip-title { font-size: 12px; font-weight: 600; color: var(--flight-guide-accent); }
+.flight-guide-dismiss { margin-left: auto; border: 0; color: var(--flight-guide-muted); background: transparent; padding: 0 8px; min-width: 34px; min-height: 34px; font: inherit; font-size: 20px; cursor: pointer; }
+.flight-guide-tip p { margin: 1px 0 0; color: var(--flight-guide-muted); font-size: 12px; line-height: 1.65; }
+.flight-guide-hand { display: block; border: 0; padding: 7px 0 0; min-height: 36px; color: var(--flight-guide-accent); background: transparent; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.flight-guide-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 12px; overflow: auto; background: rgba(0, 7, 13, .78); backdrop-filter: blur(6px); }
+.flight-guide-overlay[hidden] { display: none !important; }
+.flight-guide-dialog { width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 28px); padding: 0; overflow: auto; overscroll-behavior: contain; border: 1px solid #385563; border-radius: 20px; box-shadow: 0 30px 100px #0009; color: var(--flight-guide-ink); background: #0d172b; }
+.flight-guide-dialog-inner { padding: 22px; }
+.flight-guide-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.flight-guide-dialog-heading h2 { margin: 0; font-size: clamp(19px, 4vw, 24px); }
+.flight-guide-dialog-heading .ghost-button { flex-shrink: 0; font-size: 12px; }
+.flight-guide-goal { border-bottom: 1px solid #2a4652; padding-bottom: 14px; font-size: 14px; line-height: 1.75; color: var(--flight-guide-accent); }
+.flight-guide-current { padding: 12px 14px; border: 1px solid #315563; border-radius: 12px; background: var(--flight-guide-back); }
+.flight-guide-current h3 { margin: 0 0 5px; font-size: 15px; }
+.flight-guide-current p, .flight-guide-steps p, .flight-guide-response p { margin: 0; font-size: 13px; line-height: 1.75; color: var(--flight-guide-muted); }
+.flight-guide-steps { padding-left: 23px; margin: 18px 0; }
+.flight-guide-steps li { margin: 0 0 13px; padding-left: 4px; }
+.flight-guide-steps strong { display: block; margin-bottom: 4px; font-size: 14px; }
+.flight-guide-response { padding: 12px 0; border-top: 1px solid #2a4652; border-bottom: 1px solid #2a4652; }
+.flight-guide-response summary { cursor: pointer; color: var(--flight-guide-accent); font-size: 14px; }
+.flight-guide-response p { margin-top: 9px; }
+.flight-guide-view-note { color: var(--flight-guide-muted); font-size: 12px; line-height: 1.7; }
+.flight-guide-dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.flight-guide-dialog-actions button { min-height: 44px; font-size: 13px; }
+.flight-guide-dialog button:focus-visible, .flight-guide-tip button:focus-visible, .flight-guide-open:focus-visible, .flight-guide-intro summary:focus-visible { outline: 2px solid var(--flight-guide-accent); outline-offset: 3px; }
+@media (max-width: 700px) {
+  .flight-guide-open { min-height: 44px; }
+  .flight-guide-tip { margin: 8px 0 12px; padding: 6px 10px 9px; }
+  .flight-guide-tip p { font-size: 12px; }
+  .flight-guide-dismiss { min-width: 44px; min-height: 44px; }
+  .flight-guide-hand { min-height: 44px; }
+  .flight-guide-dialog-inner { padding: 18px 15px; }
+  .flight-guide-intro { padding: 10px 12px; }
+  .flight-guide-dialog-actions button { flex: 1 1 140px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .flight-guide-dialog { max-height: calc(100dvh - 12px); }
+  .flight-guide-dialog-inner { padding: 14px 18px; }
+  .flight-guide-tip-head { min-height: 30px; }
+}
